@@ -23,11 +23,12 @@ Browser ──(cookie session)──> Next.js Route Handlers (BFF) ──(Basic 
 ## Prasyarat
 
 - **Node.js 22 LTS** (minimal 20.9, syarat Next.js 16) dan npm.
-- Backend DOMjudge yang sudah berjalan, dengan:
-  - sebuah **contest** yang `id` atau `shortname`-nya sama dengan `DOMJUDGE_CONTEST_ID`,
-  - **akun tim** (user ber-role `team` yang terhubung ke sebuah tim) untuk login.
+- **Salah satu** dari:
+  - **Mode mock** (tanpa backend): cocok untuk mengerjakan tampilan. Lihat [Mode mock](#mode-mock-tanpa-backend).
+  - **Backend DOMjudge** yang sudah berjalan, dengan sebuah **contest** yang `id` atau `shortname`-nya sama dengan
+    `DOMJUDGE_CONTEST_ID`, dan **akun tim** (user ber-role `team` yang terhubung ke sebuah tim) untuk login.
 
-Panduan menjalankan backend ada di `backend/README.md` (butuh Linux; di Windows pakai WSL2).
+Panduan menjalankan backend ada di `BACKEND_SETUP.md` di repo backend (butuh Linux; di Windows pakai WSL2).
 Pada WSL2, DOMjudge yang berjalan di `http://localhost/domjudge` bisa diakses dari Windows lewat `localhost`.
 
 ## Menjalankan
@@ -38,16 +39,61 @@ cp .env.example .env.local     # lalu isi nilainya (lihat tabel di bawah)
 npm run dev                    # http://localhost:3000
 ```
 
+## Mode mock (tanpa backend)
+
+Untuk mengerjakan desain tanpa DOMjudge, isi `.env.local` seperti ini:
+
+```
+DOMJUDGE_MOCK=true
+DOMJUDGE_URL=
+DOMJUDGE_CONTEST_ID=IC2026
+SESSION_SECRET=<string acak minimal 32 karakter>
+```
+
+Lalu `npm run dev`. Seluruh data berasal dari `src/lib/mock/`, tanpa koneksi jaringan ke DOMjudge. Halaman dan route handler
+**tidak berubah**; hanya lapisan terbawah (`src/lib/domjudge/client.ts`) yang mengalihkan request ke mock.
+Banner kuning "MODE MOCK" tampil di semua halaman supaya data palsu tidak tertukar dengan yang sungguhan.
+
+**Akun demo**
+
+| Login             | Hasil                                               |
+| ----------------- | --------------------------------------------------- |
+| username apa saja | Masuk sebagai **Tim Demo** (password bebas)         |
+| username `admin`  | Ditolak: akun tanpa tim (menguji pesan error 403)   |
+| password `salah`  | Ditolak: kredensial salah (menguji pesan error 401) |
+
+**Data yang tersedia**: 1 contest (`IC2026`, sedang berjalan sekitar 1 jam dari 5 jam), 5 soal, 8 tim, 5 bahasa, dan seed submission
+yang mencakup berbagai kondisi: selesai (AC), salah dengan penalti (WA, TLE, RTE), compiler error tanpa penalti (CE), dan satu
+submission yang **menunggu terus** (untuk menguji tampilan "pending"). Scoreboard dihitung dengan aturan DOMjudge (penalti 20 menit).
+
+**Submit bekerja** dan tersimpan di memori server (hilang saat dev server di-restart). Submission baru berstatus
+"menunggu" selama beberapa detik, lalu verdict-nya keluar dan scoreboard ikut berubah. Verdict diberikan bergantian
+(AC, WA, TLE, AC, CE, RTE, MLE). Untuk memaksa verdict tertentu, tulis `mock:WA` (atau `AC`, `TLE`, `RTE`, `CE`, `MLE`, `OLE`, `NO`)
+di dalam file kode, misalnya sebagai komentar.
+
+**Perbedaan dengan DOMjudge sungguhan**
+
+- Statement soal berupa **HTML**, bukan PDF.
+- Halaman clarifications belum ada di frontend, jadi endpoint-nya hanya mengembalikan daftar kosong.
+- Hanya satu tim yang bisa login (Tim Demo); tim lain hanya muncul di scoreboard.
+- Scoreboard tidak pernah dibekukan (freeze).
+- Perubahan `DOMJUDGE_MOCK` pada build produksi butuh **build ulang** (nilainya ikut tertanam pada halaman statis).
+
+> **Mode mock hanya untuk pengembangan atau preview desain.** Mode ini menerima login apa saja. Jangan aktifkan untuk contest
+> sungguhan. Mode ini tidak aktif kecuali `DOMJUDGE_MOCK=true` ditulis eksplisit. Bila `DOMJUDGE_URL` kosong tanpa itu, aplikasi
+> berhenti dengan pesan error (tidak diam-diam memakai data palsu).
+
 ### Environment variable
 
 Semuanya **server-only** (tidak pernah dikirim ke browser). Divalidasi dengan zod di `src/lib/env.ts`;
 aplikasi gagal start dengan pesan jelas bila ada yang salah.
 
-| Variabel              | Contoh                         | Keterangan                                                 |
-| --------------------- | ------------------------------ | ---------------------------------------------------------- |
-| `DOMJUDGE_URL`        | `http://localhost/domjudge`    | Base URL DOMjudge, tanpa `/` di akhir dan tanpa `/api/v4`. |
-| `DOMJUDGE_CONTEST_ID` | `IC2026`                       | `id` **atau** `shortname` contest di DOMjudge.             |
-| `SESSION_SECRET`      | (string acak, minimal 32 char) | Kunci enkripsi cookie. Buat dengan `openssl rand -hex 32`. |
+| Variabel              | Contoh                         | Keterangan                                                                                      |
+| --------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `DOMJUDGE_MOCK`       | `false` (bawaan)               | `true` = mode mock, tanpa backend. Lihat bagian Mode mock.                                      |
+| `DOMJUDGE_URL`        | `http://localhost/domjudge`    | Base URL DOMjudge, tanpa `/` di akhir dan tanpa `/api/v4`. Wajib, kecuali `DOMJUDGE_MOCK=true`. |
+| `DOMJUDGE_CONTEST_ID` | `IC2026`                       | `id` **atau** `shortname` contest di DOMjudge.                                                  |
+| `SESSION_SECRET`      | (string acak, minimal 32 char) | Kunci enkripsi cookie. Buat dengan `openssl rand -hex 32`.                                      |
 
 > Jangan commit `.env.local`. Hanya `.env.example` yang boleh masuk git.
 
@@ -92,6 +138,7 @@ src/
     ui/                            # komponen shadcn (Base UI)
     contest-header.tsx             # navigasi, countdown, tombol keluar
     contest-context.tsx            # info contest + tim untuk client component
+    mock-banner.tsx                # banner kuning "MODE MOCK" (hanya tampil bila DOMJUDGE_MOCK=true)
     providers.tsx                  # TanStack Query + toast; redirect ke /login saat 401
   lib/
     env.ts, session.ts             # env tervalidasi, konfigurasi iron-session
@@ -101,6 +148,10 @@ src/
       contest.ts                   # resolveContest(): cocokkan id ATAU shortname, error jelas bila tak ada
       schema.d.ts                  # HASIL GENERATE
       types.ts                     # alias tipe (+ tipe Judgement manual)
+    mock/                          # mode mock (DOMJUDGE_MOCK=true), meniru DOMjudge /api/v4
+      data.ts                      # tim, soal, bahasa, verdict, seed submission, statement contoh
+      state.ts                     # state in-memory + perhitungan scoreboard
+      router.ts                    # pengganti `fetch` ke DOMjudge (login, GET, submit)
 ```
 
 ## Catatan untuk developer
@@ -117,6 +168,8 @@ src/
 - Menambah endpoint baru yang ingin diakses browser: tambahkan segmen pertamanya ke `ALLOWED_ROOTS` di
   `src/app/api/contest/[...path]/route.ts`.
 - Semua teks antarmuka berbahasa Indonesia.
+- Bila mengubah bentuk data yang dibaca frontend (field baru di scoreboard, submission, dst.), perbarui juga
+  `src/lib/mock/` agar mode mock tetap mewakili DOMjudge sungguhan.
 
 ## Mengerjakan desain
 

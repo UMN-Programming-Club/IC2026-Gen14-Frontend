@@ -2,6 +2,7 @@ import { Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { ContestProvider } from "@/components/contest-context";
 import { ContestHeader } from "@/components/contest-header";
+import { MockBanner } from "@/components/mock-banner";
 import { ContestError, resolveContest } from "@/lib/domjudge/contest";
 import { getSessionUser } from "@/lib/session";
 
@@ -36,6 +37,7 @@ async function ContestShell({ children }: { children: ReactNode }) {
         teamName: user.teamName ?? user.username,
       }}
     >
+      <MockBanner />
       <ContestHeader />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
         {children}
