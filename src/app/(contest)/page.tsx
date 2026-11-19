@@ -1,121 +1,180 @@
 "use client";
 
-import Link from "next/link";
+import { useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { useContestInfo } from "@/components/contest-context";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  buildChips,
+  buildRows,
+  formatDurationLabel,
+  previewModel,
+  type HomeModel,
+  type Phase,
+  type PreviewKey,
+} from "@/components/home/home-model";
+import {
+  BeforeView,
+  EndedView,
+  RunningView,
+  TimerBlock,
+} from "@/components/home/home-views";
+import { SponsorMarquee } from "@/components/home/sponsor-marquee";
+import { useNow } from "@/components/home/use-now";
 import { useContestQuery } from "@/lib/api-client";
-import type { ContestState, Scoreboard } from "@/lib/domjudge/types";
+import type {
+  ContestProblem,
+  ContestState,
+  Judgement,
+  JudgementType,
+  Scoreboard,
+  Submission,
+} from "@/lib/domjudge/types";
 
-function fmt(iso?: string | null) {
-  return iso
-    ? format(new Date(iso), "EEEE, d MMM yyyy HH:mm", { locale: idLocale })
-    : "-";
-}
+const PREVIEW_KEYS: PreviewKey[] = [
+  "before",
+  "running-empty",
+  "running",
+  "ended",
+];
 
-function phase(state?: ContestState) {
-  if (!state?.started)
-    return { label: "Belum dimulai", tone: "secondary" as const };
-  if (state.ended) return { label: "Selesai", tone: "outline" as const };
-  if (state.frozen)
-    return { label: "Scoreboard dibekukan", tone: "secondary" as const };
-  return { label: "Berlangsung", tone: "default" as const };
-}
-
-export default function OverviewPage() {
+export default function HomePage() {
   const { contest, teamId, teamName } = useContestInfo();
+  const now = useNow();
+
   const state = useContestQuery<ContestState>("state", 15_000);
   const board = useContestQuery<Scoreboard>("scoreboard", 15_000);
+  const problems = useContestQuery<ContestProblem[]>("problems", 60_000);
+  const submissions = useContestQuery<Submission[]>("submissions", 5_000);
+  const judgements = useContestQuery<Judgement[]>("judgements", 5_000);
+  const jtypes = useContestQuery<JudgementType[]>("judgement-types", 300_000);
 
-  const myRow = board.data?.rows.find((r) => r.team_id === teamId);
-  const p = phase(state.data);
+  // Preview 4 state (hanya development): /?preview=before|running-empty|running|ended
+  const previewParam = useSearchParams().get("preview") as PreviewKey | null;
+  const preview =
+    process.env.NODE_ENV !== "production" &&
+    previewParam &&
+    PREVIEW_KEYS.includes(previewParam)
+      ? previewParam
+      : null;
+
+  const startMs = contest.start_time ? Date.parse(contest.start_time) : null;
+  const endMs = contest.end_time ? Date.parse(contest.end_time) : null;
+
+  const live = useMemo<HomeModel>(() => {
+    const clock = now ?? 0;
+    const started =
+      !!state.data?.started ||
+      (startMs !== null && clock >= startMs && now !== null);
+    const ended =
+      !!state.data?.ended || (endMs !== null && clock >= endMs && now !== null);
+    const phase: Phase = ended ? "ended" : started ? "running" : "before";
+
+    const row = board.data?.rows.find((r) => r.team_id === teamId);
+    const chips = buildChips(problems.data, board.data, teamId);
+    return {
+      phase,
+      teamName,
+      targetMs: phase === "before" ? startMs : endMs,
+      startLabel:
+        startMs !== null
+          ? format(new Date(startMs), "dd MMM yyyy", {
+              locale: idLocale,
+            }).toUpperCase()
+          : "-",
+      durationLabel: formatDurationLabel(
+        contest.duration,
+        startMs ?? undefined,
+        endMs ?? undefined,
+      ),
+      problemCount: problems.data?.length || chips.length || null,
+      stats: {
+        rank: row?.rank ?? null,
+        solved: row?.score?.num_solved ?? 0,
+        penalty: row?.score?.total_time ?? 0,
+        submissionCount: submissions.data?.length ?? 0,
+      },
+      chips,
+      rows: buildRows(
+        submissions.data,
+        judgements.data,
+        jtypes.data,
+        problems.data,
+      ),
+    };
+  }, [
+    now,
+    state.data,
+    board.data,
+    problems.data,
+    submissions.data,
+    judgements.data,
+    jtypes.data,
+    contest.duration,
+    startMs,
+    endMs,
+    teamId,
+    teamName,
+  ]);
+
+  const model = useMemo(
+    () => (preview && now !== null ? previewModel(preview, now) : live),
+    [preview, now, live],
+  );
+
+  // Preview memakai target tetap relatif terhadap waktu mount pertama, supaya hitung mundur berjalan.
+  const previewAnchor = useMemo(() => ({ value: null as number | null }), []);
+  let targetMs = model.targetMs;
+  if (preview && now !== null && model.targetMs !== null) {
+    previewAnchor.value ??= model.targetMs;
+    targetMs = previewAnchor.value;
+  }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-2">
-            {contest.formal_name ?? contest.name}
-            <Badge variant={p.tone}>{state.isPending ? "..." : p.label}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-1 text-sm">
-          <p>
-            <span className="text-zinc-500">Mulai:</span>{" "}
-            {fmt(contest.start_time)}
-          </p>
-          <p>
-            <span className="text-zinc-500">Selesai:</span>{" "}
-            {fmt(contest.end_time)}
-          </p>
-          <p>
-            <span className="text-zinc-500">Durasi:</span>{" "}
-            {contest.duration ?? "-"}
-          </p>
-          <p>
-            <span className="text-zinc-500">Penalti salah:</span>{" "}
-            {contest.penalty_time ?? 20} menit
-          </p>
-          {contest.warning_message && (
-            <p className="mt-2 rounded-md bg-amber-50 p-2 text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              {contest.warning_message}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+    <div className="bg-background relative flex h-full min-h-0 flex-col overflow-hidden">
+      {/* Latar dekoratif: glow teal + pola titik */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            model.phase === "ended"
+              ? "radial-gradient(60% 45% at 50% 100%, rgb(180 40 40 / 0.10), transparent 70%), radial-gradient(55% 30% at 50% 0%, rgb(64 186 169 / 0.06), transparent 70%)"
+              : "radial-gradient(60% 35% at 50% 0%, rgb(64 186 169 / 0.09), transparent 70%)",
+        }}
+      />
+      <div className="bg-dots pointer-events-none absolute inset-0 top-[2.9rem] lg:top-[3.3rem]" />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{teamName}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          {board.isPending ? (
-            <p className="text-sm text-zinc-500">Memuat posisi tim...</p>
-          ) : board.isError ? (
-            <p role="alert" className="text-sm text-red-600">
-              {board.error.message}
-            </p>
-          ) : myRow ? (
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div>
-                <p className="text-2xl font-semibold">{myRow.rank ?? "-"}</p>
-                <p className="text-xs text-zinc-500">Peringkat</p>
-              </div>
-              <div>
-                <p className="text-2xl font-semibold">
-                  {myRow.score?.num_solved ?? 0}
-                </p>
-                <p className="text-xs text-zinc-500">Soal selesai</p>
-              </div>
-              <div>
-                <p className="text-2xl font-semibold">
-                  {myRow.score?.total_time ?? 0}
-                </p>
-                <p className="text-xs text-zinc-500">Penalti (mnt)</p>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-zinc-500">
-              Tim kamu belum muncul di scoreboard contest ini.
-            </p>
-          )}
-          <div className="flex gap-2">
-            <Button render={<Link href="/problems" />} nativeButton={false}>
-              Lihat soal
-            </Button>
-            <Button
-              variant="outline"
-              render={<Link href="/scoreboard" />}
-              nativeButton={false}
-            >
-              Scoreboard
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <TimerBlock
+          phase={model.phase}
+          now={now}
+          targetMs={targetMs}
+          startLabel={model.startLabel}
+        />
+        {model.phase === "before" && (
+          <BeforeView
+            now={now}
+            targetMs={targetMs}
+            teamName={model.teamName}
+            durationLabel={model.durationLabel}
+            problemCount={model.problemCount}
+          />
+        )}
+        {model.phase === "running" && (
+          <RunningView
+            teamName={model.teamName}
+            stats={model.stats}
+            chips={model.chips}
+            rows={model.rows}
+          />
+        )}
+        {model.phase === "ended" && (
+          <EndedView stats={model.stats} total={model.chips.length} />
+        )}
+      </div>
+
+      <SponsorMarquee className="relative" />
     </div>
   );
 }
