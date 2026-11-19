@@ -62,6 +62,15 @@ export async function GET(
       if (v) headers.set(h, v);
     }
     headers.set("Cache-Control", "no-store");
+    // Jam DOMjudge (header Date-nya, resolusi 1 detik) untuk menyelaraskan jam hitung mundur di browser.
+    const djDate = Date.parse(upstream.headers.get("date") ?? "");
+    if (Number.isFinite(djDate)) {
+      headers.set("X-Clock-Ms", String(djDate));
+      headers.set("X-Clock-Resolution", "1000");
+    } else {
+      headers.set("X-Clock-Ms", String(Date.now()));
+      headers.set("X-Clock-Resolution", "1");
+    }
     return new Response(upstream.body, { status: upstream.status, headers });
   } catch (e) {
     if (e instanceof ContestError) {

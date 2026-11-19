@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { recordClockSample } from "@/lib/server-clock";
 
 export class ApiError extends Error {
   constructor(
@@ -17,10 +18,18 @@ export async function getJson<T>(
   path: string,
   signal?: AbortSignal,
 ): Promise<T> {
+  const sentAt = Date.now();
   const res = await fetch(`/api/contest/${path}`, {
     signal,
     cache: "no-store",
   });
+  const receivedAt = Date.now();
+  // Tiap respons membawa jam DOMjudge; ikut dipakai untuk menyempitkan estimasi selisih jam.
+  const clockMs = Number(res.headers.get("x-clock-ms"));
+  const clockRes = Number(res.headers.get("x-clock-resolution")) || 1;
+  if (Number.isFinite(clockMs) && clockMs > 0) {
+    recordClockSample(sentAt, receivedAt, clockMs, clockRes);
+  }
   // 401 ditangani global di <Providers> (QueryCache.onError -> redirect ke /login).
   const body = await res.json().catch(() => null);
   if (!res.ok) {
