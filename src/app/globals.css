@@ -26,6 +26,8 @@
   --color-ok: #2fc98e; /* = --success */
   --color-wa: #e05a5a; /* = --danger */
   --color-tle: #f2a33a;
+  --color-ice-400: #7fd0f2; /* penanda leaderboard dibekukan */
+  --color-ice-300: #b8e7fb;
 }
 
 @theme inline {

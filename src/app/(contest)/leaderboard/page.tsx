@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Check, Compass, Radio, Star, X } from "lucide-react";
+import { Check, Compass, Radio, Snowflake, Star, X } from "lucide-react";
 import { useContestClock } from "@/components/arena/contest-clock";
 import { PageContainer, PageTitle } from "@/components/arena/page-title";
 import { useContestInfo } from "@/components/contest-context";
@@ -101,8 +101,53 @@ function Cell({ p }: { p?: ScoreboardProblem }) {
   );
 }
 
+/** Ms sejak contest mulai -> "H:MM:SS". */
+function elapsedLabel(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+/** Penanda tegas bahwa klasemen sedang dibekukan (freeze), bukan sekadar teks kecil di bawah judul. */
+function FrozenBanner({
+  atLabel,
+  ended,
+}: {
+  atLabel: string | null;
+  ended: boolean;
+}) {
+  return (
+    <div
+      role="status"
+      className="border-ice-400/50 bg-ice-400/10 mt-6 flex items-center gap-4 rounded-2xl border px-4 py-4 sm:gap-5 sm:px-6"
+    >
+      <span className="bg-ice-400/15 text-ice-400 grid size-12 shrink-0 place-items-center rounded-xl sm:size-14">
+        <Snowflake className="size-7 sm:size-8" aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="title-display text-ice-300 text-2xl sm:text-4xl">
+          Leaderboard dibekukan
+        </p>
+        <p className="mt-1 text-sm text-mist-400">
+          {atLabel ? `Dibekukan pada ${atLabel} waktu contest. ` : ""}
+          Submission setelah pembekuan tampil sebagai{" "}
+          <span className="text-pending font-semibold">pending</span>.{" "}
+          {ended
+            ? "Contest sudah selesai, hasil akhir diumumkan panitia."
+            : "Hasil akhir diumumkan panitia."}
+        </p>
+      </div>
+      <span className="border-ice-400/60 text-ice-400 hidden shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-bold tracking-[0.2em] sm:inline">
+        FROZEN
+      </span>
+    </div>
+  );
+}
+
 export default function LeaderboardPage() {
-  const { teamId } = useContestInfo();
+  const { teamId, contest } = useContestInfo();
   const { phase } = useContestClock();
   const board = useContestQuery<Scoreboard>("scoreboard", 15_000);
   const teams = useContestQuery<Team[]>("teams", 60_000);
@@ -116,6 +161,14 @@ export default function LeaderboardPage() {
 
   const cols = problems.data ?? [];
   const frozen = !!board.data?.state?.frozen && !board.data?.state?.thawed;
+  const frozenAtMs = board.data?.state?.frozen
+    ? Date.parse(board.data.state.frozen)
+    : NaN;
+  const startMs = contest.start_time ? Date.parse(contest.start_time) : NaN;
+  const frozenAtLabel =
+    Number.isFinite(frozenAtMs) && Number.isFinite(startMs)
+      ? elapsedLabel(frozenAtMs - startMs)
+      : null;
   // Kolom soal: 4 kolom tetap (#, tim, AC, penalti) lalu satu kolom per soal.
   const grid = `3rem minmax(9rem,1.6fr) 4rem 5rem repeat(${Math.max(cols.length, 1)}, minmax(5.5rem,1fr))`;
 
@@ -127,13 +180,24 @@ export default function LeaderboardPage() {
         joined
         subtitle={
           frozen
-            ? "Scoreboard sedang dibekukan. Hasil akhir diumumkan panitia."
+            ? "Klasemen sementara pada saat pembekuan"
             : "Klasemen tim, diperbarui otomatis"
         }
         aside={<Legend />}
       />
 
-      <section className="border-line bg-panel mt-7 overflow-x-auto rounded-2xl border">
+      {frozen && phase !== "before" && (
+        <FrozenBanner atLabel={frozenAtLabel} ended={phase === "ended"} />
+      )}
+
+      <section
+        className={cn(
+          "bg-panel mt-6 overflow-x-auto rounded-2xl border",
+          frozen && phase !== "before"
+            ? "border-ice-400/40 shadow-[0_0_0_1px_rgba(127,208,242,0.08),0_0_32px_-12px_rgba(127,208,242,0.35)]"
+            : "border-line",
+        )}
+      >
         {phase === "before" ? (
           <div className="flex flex-col items-center px-6 py-16 text-center">
             <Compass className="size-9 text-mist-400" aria-hidden="true" />
