@@ -1,6 +1,8 @@
 // State in-memory untuk mode mock. Hilang saat server dev di-restart.
+import { env } from "@/lib/env";
 import type {
   Contest,
+  ContestProblem,
   ContestState,
   Judgement,
   Scoreboard,
@@ -15,9 +17,12 @@ import {
   MOCK_CONTEST_ID,
   PENALTY_MINUTES,
   PROBLEMS,
+  RUNNING_ELAPSED_MIN,
   SEED_SUBMISSIONS,
   TEAMS,
 } from "./data";
+
+export type MockPhase = "before" | "running" | "ended";
 
 export interface MockSubmission {
   id: number;
@@ -43,26 +48,61 @@ interface MockState {
 /** Verdict yang diberikan bergantian untuk submission baru, supaya semua kondisi sempat terlihat. */
 const VERDICT_CYCLE = ["AC", "WA", "TLE", "AC", "CE", "RTE", "MLE"];
 
+const MIN = 60_000;
+
 // `globalThis` dipakai agar state tidak ter-reset oleh hot reload / bundel route yang terpisah.
 const g = globalThis as typeof globalThis & { __mockState?: MockState };
 
 function seed(): MockState {
-  const startMs = Date.now() - 60 * 60 * 1000;
-  const submissions = SEED_SUBMISSIONS.map((s, i) => ({
+  const now = Date.now();
+  const scenario = env.MOCK_SCENARIO;
+
+  const startMs =
+    scenario === "before"
+      ? now + (8 * 24 * 60 + 14 * 60 + 37) * MIN + 8_000
+      : scenario === "soon"
+        ? now + 25_000 // untuk menguji peralihan otomatis saat contest mulai
+        : scenario === "unscheduled"
+          ? now + 10 * 365 * 24 * 60 * MIN // tidak pernah tercapai selama sesi
+          : scenario === "ended"
+            ? now - CONTEST_DURATION_MS - 5 * MIN
+            : scenario === "ending"
+              ? now - CONTEST_DURATION_MS + 50_000 // freeze ~25 dtk lagi, selesai ~50 dtk lagi
+              : now - RUNNING_ELAPSED_MIN * MIN;
+
+  // Sebelum contest dimulai belum ada submission.
+  const seeds =
+    scenario === "before" || scenario === "soon" || scenario === "unscheduled"
+      ? []
+      : SEED_SUBMISSIONS;
+  const submissions = seeds.map((s, i) => ({
     id: i + 1,
     teamId: s.teamId,
     problemId: s.problemId,
     languageId: s.languageId,
-    at: startMs + s.minute * 60_000,
+    at: startMs + s.minute * MIN,
     filename: `seed.${s.languageId}`,
     verdict: s.verdict,
-    stuckPending: !!s.pending,
+    // Setelah contest selesai, semua submission sudah selesai dinilai.
+    stuckPending: scenario === "ended" ? false : !!s.pending,
   }));
   return { startMs, submissions, nextId: submissions.length + 1, cycle: 0 };
 }
 
 export function getState(): MockState {
   return (g.__mockState ??= seed());
+}
+
+export function getPhase(now: number): MockPhase {
+  const { startMs } = getState();
+  if (now < startMs) return "before";
+  if (now >= startMs + CONTEST_DURATION_MS) return "ended";
+  return "running";
+}
+
+/** DOMjudge menyembunyikan daftar soal dari tim sebelum contest dimulai. */
+export function visibleProblems(now: number): ContestProblem[] {
+  return getPhase(now) === "before" ? [] : PROBLEMS;
 }
 
 export function isPending(s: MockSubmission, now: number): boolean {
@@ -81,6 +121,8 @@ export function addSubmission(
   languageId: string,
   filename: string,
   code: string,
+  /** true = disimpan tetapi tidak pernah dinilai (submission setelah contest selesai, seperti DOMjudge). */
+  stored = false,
 ): MockSubmission {
   const state = getState();
   const sub: MockSubmission = {
@@ -91,7 +133,7 @@ export function addSubmission(
     at: Date.now(),
     filename,
     verdict: pickVerdict(state, code),
-    stuckPending: false,
+    stuckPending: stored,
   };
   state.submissions.push(sub);
   return sub;
@@ -142,6 +184,7 @@ export function toJudgement(s: MockSubmission, now: number): Judgement {
 
 export function buildContest(): Contest {
   const { startMs } = getState();
+  const unscheduled = env.MOCK_SCENARIO === "unscheduled";
   return {
     cid: 1,
     id: MOCK_CONTEST_ID,
@@ -149,10 +192,13 @@ export function buildContest(): Contest {
     name: "Internal Contest (Mock)",
     formal_name: "UMNPC Internal Contest (Mock)",
     scoreboard_type: "pass-fail",
-    start_time: new Date(startMs).toISOString(),
-    end_time: new Date(startMs + CONTEST_DURATION_MS).toISOString(),
-    duration: "5:00:00.000",
-    scoreboard_freeze_duration: "1:00:00.000",
+    // Contest yang sudah di-activate tapi start time-nya belum diisi: DOMjudge mengirim null.
+    start_time: unscheduled ? null : new Date(startMs).toISOString(),
+    end_time: unscheduled
+      ? null
+      : new Date(startMs + CONTEST_DURATION_MS).toISOString(),
+    duration: "3:00:00.000",
+    scoreboard_freeze_duration: freezeDurationLabel(),
     allow_submit: true,
     runtime_as_score_tiebreaker: false,
     warning_message: null,
@@ -160,13 +206,30 @@ export function buildContest(): Contest {
   };
 }
 
+/** Lama freeze scoreboard sebelum contest berakhir. Skenario "ending" memakai 25 detik agar mudah diuji. */
+function freezeDurationMs(): number {
+  return env.MOCK_SCENARIO === "ending" ? 25_000 : 15 * MIN;
+}
+
+function freezeDurationLabel(): string {
+  return env.MOCK_SCENARIO === "ending" ? "0:00:25.000" : "0:15:00.000";
+}
+
 export function buildContestState(now: number): ContestState {
   const { startMs } = getState();
-  const ended = now >= startMs + CONTEST_DURATION_MS;
+  const phase = getPhase(now);
+  const freezeAt = startMs + CONTEST_DURATION_MS - freezeDurationMs();
   return {
-    started: new Date(startMs).toISOString(),
-    ended: ended ? new Date(startMs + CONTEST_DURATION_MS).toISOString() : null,
-    frozen: null,
+    started: phase === "before" ? null : new Date(startMs).toISOString(),
+    ended:
+      phase === "ended"
+        ? new Date(startMs + CONTEST_DURATION_MS).toISOString()
+        : null,
+    // Seperti DOMjudge: setelah freeze tetap beku (juga setelah selesai) sampai di-unfreeze juri.
+    frozen:
+      phase !== "before" && now >= freezeAt
+        ? new Date(freezeAt).toISOString()
+        : null,
     thawed: null,
     finalized: null,
     end_of_updates: null,
@@ -187,6 +250,7 @@ interface TeamResult {
 function resultFor(
   teamId: string,
   subs: MockSubmission[],
+  problems: ContestProblem[],
   startMs: number,
   now: number,
 ): TeamResult {
@@ -194,7 +258,7 @@ function resultFor(
   let totalTime = 0;
   const solvedAt = new Map<string, number>();
 
-  const problems = PROBLEMS.map((p): ScoreboardProblem => {
+  const cells = problems.map((p): ScoreboardProblem => {
     const attempts = subs
       .filter((s) => s.teamId === teamId && s.problemId === p.id)
       .sort((a, b) => a.at - b.at);
@@ -218,7 +282,7 @@ function resultFor(
 
     let time: number | null = null;
     if (acAt !== undefined) {
-      time = Math.floor((acAt - startMs) / 60_000);
+      time = Math.floor((acAt - startMs) / MIN);
       solved++;
       totalTime += time + wrong * PENALTY_MINUTES;
       solvedAt.set(p.id as string, acAt);
@@ -237,17 +301,18 @@ function resultFor(
     };
   });
 
-  return { teamId, solved, totalTime, problems, solvedAt };
+  return { teamId, solved, totalTime, problems: cells, solvedAt };
 }
 
 export function buildScoreboard(now: number): Scoreboard {
   const state = getState();
+  const problems = visibleProblems(now);
   const results = TEAMS.map((t) =>
-    resultFor(t.id as string, state.submissions, state.startMs, now),
+    resultFor(t.id as string, state.submissions, problems, state.startMs, now),
   );
 
   // first-to-solve: AC paling awal per soal
-  for (const p of PROBLEMS) {
+  for (const p of problems) {
     let best: { r: TeamResult; at: number } | undefined;
     for (const r of results) {
       const at = r.solvedAt.get(p.id as string);
@@ -278,11 +343,10 @@ export function buildScoreboard(now: number): Scoreboard {
     };
   });
 
-  const elapsed = now - state.startMs;
   return {
     event_id: String(state.nextId),
     time: new Date(now).toISOString(),
-    contest_time: contestTime(elapsed),
+    contest_time: contestTime(now - state.startMs),
     state: buildContestState(now),
     rows,
   };

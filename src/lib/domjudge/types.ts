@@ -3,7 +3,13 @@ import type { components } from "./schema";
 
 type S = components["schemas"];
 
-export type Contest = S["Contest"];
+/** Schema menandai start/end sebagai opsional saja; DOMjudge mengirim `null` bila start time belum diisi. */
+export type Contest = Omit<S["Contest"], "start_time" | "end_time"> & {
+  start_time?: string | null;
+  end_time?: string | null;
+  /** true = kerangka minimal (waktu mulai tidak diketahui), bukan data lengkap dari DOMjudge. */
+  synthetic?: boolean;
+};
 export type ContestState = S["ContestState"];
 export type ContestProblem = S["ContestProblem"];
 export type Language = S["Language"];

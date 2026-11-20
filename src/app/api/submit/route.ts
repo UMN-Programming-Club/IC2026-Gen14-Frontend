@@ -1,5 +1,6 @@
 import { djFetch } from "@/lib/domjudge/client";
 import { ContestError, resolveContest } from "@/lib/domjudge/contest";
+import { fetchServerPhase } from "@/lib/domjudge/phase";
 import { getSessionUser } from "@/lib/session";
 
 const MAX_BYTES = 256 * 1024; // batas kode 256 KB
@@ -31,6 +32,16 @@ export async function POST(request: Request) {
 
   try {
     const contest = await resolveContest(user.username, user.password);
+
+    // DOMjudge hanya menolak submission sebelum contest mulai; setelah selesai tetap diterima dan
+    // disimpan. Jadi penolakannya ditegakkan di sini, bukan hanya dengan mematikan tombol di UI.
+    const phase = await fetchServerPhase(user, String(contest.id));
+    if (phase === null)
+      return fail(502, "Status contest tidak dapat dipastikan.");
+    if (phase === "before") return fail(403, "Contest belum dimulai.");
+    if (phase === "ended") {
+      return fail(403, "Contest sudah selesai. Submission tidak diterima.");
+    }
 
     const upstreamForm = new FormData();
     upstreamForm.set("problem", problem);
