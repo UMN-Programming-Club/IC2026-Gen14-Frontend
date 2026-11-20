@@ -18,10 +18,15 @@ export function MockBanner() {
       className="border-brass-400/30 bg-brass-400/15 text-brass-400 shrink-0 border-b px-4 py-1.5 text-center text-xs"
     >
       <strong className="tracking-wider">MODE MOCK</strong> · data contoh,
-      contest {SCENARIO_LABEL[env.MOCK_SCENARIO]}. Login: username apa saja
-      (password bebas); <code className="font-mono">baru</code> = tim tanpa
-      submission, <code className="font-mono">admin</code> = akun tanpa tim,
-      password <code className="font-mono">salah</code> = ditolak.
+      contest {SCENARIO_LABEL[env.MOCK_SCENARIO]}.
+      {/* Petunjuk login cukup di layar lebar; di HP banner dibuat satu-dua baris saja. */}
+      <span className="hidden sm:inline">
+        {" "}
+        Login: username apa saja (password bebas);{" "}
+        <code className="font-mono">baru</code> = tim tanpa submission,{" "}
+        <code className="font-mono">admin</code> = akun tanpa tim, password{" "}
+        <code className="font-mono">salah</code> = ditolak.
+      </span>
     </div>
   );
 }

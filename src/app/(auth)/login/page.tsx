@@ -45,7 +45,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden lg:grid-cols-[55.6fr_44.4fr] lg:grid-rows-1">
+    <main className="grid min-h-full grid-rows-[auto_1fr] lg:h-full lg:min-h-0 lg:grid-cols-[55.6fr_44.4fr] lg:grid-rows-1 lg:overflow-hidden">
       {/* ---------- Hero kiri ---------- */}
       <section className="border-line relative flex min-h-0 flex-col overflow-hidden border-b px-6 pt-5 pb-4 lg:border-r lg:border-b-0 lg:px-[3.75rem] lg:pt-[4.25rem] lg:pb-[3.5rem]">
         <div className="bg-dots pointer-events-none absolute inset-0" />
@@ -102,7 +102,7 @@ export default function LoginPage() {
       </section>
 
       {/* ---------- Form kanan ---------- */}
-      <section className="flex min-h-0 items-center justify-center px-6 lg:px-[4.6rem]">
+      <section className="flex min-h-0 items-center justify-center px-6 py-8 lg:px-[4.6rem] lg:py-0">
         <form onSubmit={onSubmit} className="w-full max-w-[24.3rem]">
           <h2 className="font-display text-[2rem] leading-none font-extrabold uppercase italic lg:text-[2.45rem]">
             Masuk ke Arena
