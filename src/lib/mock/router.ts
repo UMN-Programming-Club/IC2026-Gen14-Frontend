@@ -132,8 +132,11 @@ export async function mockFetch(request: Request): Promise<Response> {
 
   // POST /contests/{cid}/submissions
   if (resource === "submissions" && method === "POST" && !id) {
-    if (getPhase(now) !== "running") {
-      return error(403, "Contest tidak sedang berlangsung (mock).");
+    // Meniru DOMjudge asli: HANYA menolak sebelum contest mulai. Setelah selesai, submission tetap
+    // diterima ("stored but not processed"), jadi penolakannya harus dilakukan frontend/BFF.
+    const phase = getPhase(now);
+    if (phase === "before") {
+      return error(403, "The contest is closed, no submissions accepted.");
     }
     const form = await request.formData().catch(() => null);
     const problem = form?.get("problem");
@@ -158,7 +161,14 @@ export async function mockFetch(request: Request): Promise<Response> {
       return error(400, "Tidak ada file kode (mock).");
     }
     const code = (await file.text()).slice(0, 4096);
-    const sub = addSubmission(teamId, problem, language, file.name, code);
+    const sub = addSubmission(
+      teamId,
+      problem,
+      language,
+      file.name,
+      code,
+      phase === "ended",
+    );
     return json(toSubmission(sub, state.startMs));
   }
 

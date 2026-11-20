@@ -45,12 +45,18 @@ export default function ProblemsLayout({ children }: { children: ReactNode }) {
         subtitle="Pilih soal untuk melihat detail dan mengirim solusi"
       />
 
-      {phase === "before" ? (
+      {phase === "before" || phase === "ended" ? (
         <div className="border-line bg-panel mt-8 flex flex-col items-center rounded-2xl border px-6 py-16 text-center">
           <Lock className="size-9 text-mist-400" aria-hidden="true" />
-          <p className="mt-4 text-lg font-bold">Problemset masih terkunci</p>
+          <p className="mt-4 text-lg font-bold">
+            {phase === "ended"
+              ? "Problemset sudah ditutup"
+              : "Problemset masih terkunci"}
+          </p>
           <p className="mt-1 text-sm text-mist-400">
-            Soal terbuka begitu contest dimulai.
+            {phase === "ended"
+              ? "Contest sudah selesai, soal tidak lagi dapat dilihat."
+              : "Soal terbuka begitu contest dimulai."}
           </p>
         </div>
       ) : problems.isPending ? (

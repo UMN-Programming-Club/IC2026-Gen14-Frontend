@@ -121,6 +121,8 @@ export function addSubmission(
   languageId: string,
   filename: string,
   code: string,
+  /** true = disimpan tetapi tidak pernah dinilai (submission setelah contest selesai, seperti DOMjudge). */
+  stored = false,
 ): MockSubmission {
   const state = getState();
   const sub: MockSubmission = {
@@ -131,7 +133,7 @@ export function addSubmission(
     at: Date.now(),
     filename,
     verdict: pickVerdict(state, code),
-    stuckPending: false,
+    stuckPending: stored,
   };
   state.submissions.push(sub);
   return sub;

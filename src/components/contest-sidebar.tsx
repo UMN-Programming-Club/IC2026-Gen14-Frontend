@@ -25,7 +25,7 @@ interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  /** Terkunci sampai contest dimulai. */
+  /** Hanya terbuka selama contest berlangsung (terkunci sebelum mulai dan setelah selesai). */
   lockedUntilStart?: boolean;
 }
 
@@ -67,10 +67,12 @@ function NavLink({
   item,
   active,
   locked,
+  lockedReason,
 }: {
   item: NavItem;
   active: boolean;
   locked: boolean;
+  lockedReason: string;
 }) {
   const Icon = item.icon;
   const base =
@@ -94,7 +96,7 @@ function NavLink({
     return (
       <div
         aria-disabled="true"
-        title={`${item.label} (terkunci sampai contest dimulai)`}
+        title={`${item.label} (${lockedReason})`}
         className={cn(base, "cursor-not-allowed text-white/25")}
       >
         {inner}
@@ -128,7 +130,9 @@ export function ContestSidebar() {
   const preview = useSearchParams().get("preview");
   const previewBefore =
     process.env.NODE_ENV !== "production" && preview === "before";
-  const notStarted = previewBefore || phase === "before";
+  // Problemset hanya terbuka selama contest berlangsung: terkunci sebelum mulai DAN setelah selesai.
+  const problemsetClosed =
+    previewBefore || phase === "before" || phase === "ended";
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -160,7 +164,12 @@ export function ContestSidebar() {
             key={item.href}
             item={item}
             active={isActive(item.href)}
-            locked={!!item.lockedUntilStart && notStarted}
+            locked={!!item.lockedUntilStart && problemsetClosed}
+            lockedReason={
+              phase === "ended"
+                ? "terkunci, contest sudah selesai"
+                : "terkunci sampai contest dimulai"
+            }
           />
         ))}
 

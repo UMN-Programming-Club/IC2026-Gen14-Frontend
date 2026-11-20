@@ -25,9 +25,13 @@ import { useContestQuery } from "@/lib/api-client";
 import { cellStatus } from "@/lib/contest-status";
 import type {
   ContestProblem,
+  Judgement,
+  JudgementType,
   Language,
   Scoreboard,
+  Submission,
 } from "@/lib/domjudge/types";
+import { latestVerdictByProblem } from "@/lib/verdicts";
 import { formatBytes, formatMinutes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +106,15 @@ function StatBox({
 function TeamStatus({ problemId }: { problemId: string }) {
   const { teamId } = useContestInfo();
   const board = useContestQuery<Scoreboard>("scoreboard", 15_000);
+  // Verdict submission terakhir (mis. "Runtime Error"), sama seperti di Home.
+  const submissions = useContestQuery<Submission[]>("submissions", 5_000);
+  const judgements = useContestQuery<Judgement[]>("judgements", 5_000);
+  const jtypes = useContestQuery<JudgementType[]>("judgement-types", 300_000);
+  const lastVerdict = latestVerdictByProblem(
+    submissions.data,
+    judgements.data,
+    jtypes.data,
+  ).get(problemId);
   const cell = board.data?.rows
     .find((r) => r.team_id === teamId)
     ?.problems?.find((p) => p.problem_id === problemId);
@@ -132,7 +145,10 @@ function TeamStatus({ problemId }: { problemId: string }) {
     content = (
       <>
         <span className="bg-wa/15 text-wa inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold">
-          <X className="size-3.5" strokeWidth={3} /> Belum benar
+          <X className="size-3.5" strokeWidth={3} />{" "}
+          {lastVerdict && lastVerdict.kind === "wrong"
+            ? lastVerdict.text
+            : "Belum benar"}
         </span>
         <span className="font-mono text-sm text-mist-400">
           {cell.num_judged} percobaan

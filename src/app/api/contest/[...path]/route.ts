@@ -1,5 +1,6 @@
 import { djFetch } from "@/lib/domjudge/client";
 import { ContestError, resolveContest } from "@/lib/domjudge/contest";
+import { PHASE_MESSAGE, fetchServerPhase } from "@/lib/domjudge/phase";
 import { getSessionUser } from "@/lib/session";
 
 /** Segmen pertama yang boleh diteruskan ke DOMjudge. Hak akses sebenarnya tetap ditegakkan DOMjudge. */
@@ -45,6 +46,29 @@ export async function GET(
 
   try {
     const contest = await resolveContest(user.username, user.password);
+
+    // Soal hanya boleh dilihat selama contest berlangsung. DOMjudge tidak menyembunyikannya setelah
+    // contest selesai, jadi ditegakkan di sini (bukan hanya di UI, yang bisa dilewati).
+    let stripProblems = false;
+    if (path[0] === "problems") {
+      const phase = await fetchServerPhase(user, String(contest.id));
+      if (phase === null) {
+        return Response.json(
+          { ok: false, message: "Status contest tidak dapat dipastikan." },
+          { status: 502 },
+        );
+      }
+      if (path.length > 1 && phase !== "running") {
+        return Response.json(
+          { ok: false, message: PHASE_MESSAGE[phase] },
+          { status: 403, headers: { "Cache-Control": "no-store" } },
+        );
+      }
+      // Daftar soal tetap dibutuhkan leaderboard (label dan warna kolom), tetapi tanpa judul,
+      // batas waktu, dan tautan statement.
+      stripProblems = phase === "ended";
+    }
+
     const search = new URL(request.url).search;
     const upstream = await djFetch(
       user,
@@ -70,6 +94,23 @@ export async function GET(
     } else {
       headers.set("X-Clock-Ms", String(Date.now()));
       headers.set("X-Clock-Resolution", "1");
+    }
+    if (stripProblems && upstream.ok) {
+      const list = (await upstream.json().catch(() => null)) as Array<
+        Record<string, unknown>
+      > | null;
+      const safe = Array.isArray(list)
+        ? list.map((p) => ({
+            id: p.id,
+            label: p.label,
+            ordinal: p.ordinal,
+            rgb: p.rgb,
+            color: p.color,
+          }))
+        : [];
+      headers.set("Content-Type", "application/json");
+      headers.delete("content-length");
+      return new Response(JSON.stringify(safe), { status: 200, headers });
     }
     return new Response(upstream.body, { status: upstream.status, headers });
   } catch (e) {

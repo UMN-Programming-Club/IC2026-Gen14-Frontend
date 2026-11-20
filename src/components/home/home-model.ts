@@ -8,7 +8,9 @@ import type {
 
 export type Phase = "before" | "running" | "ended";
 export type ChipStatus = "solved" | "wrong" | "pending" | "none";
-export type VerdictKind = "accepted" | "wrong" | "pending";
+import { VERDICT_TEXT, type VerdictKind } from "@/lib/verdicts";
+
+export type { VerdictKind };
 
 export interface ProblemChip {
   label: string;
@@ -29,17 +31,6 @@ export interface HomeStats {
   penalty: number;
   submissionCount: number;
 }
-
-const VERDICT_TEXT: Record<string, string> = {
-  AC: "Accepted",
-  WA: "Wrong Answer",
-  TLE: "Time Limit",
-  RTE: "Runtime Error",
-  MLE: "Memory Limit",
-  CE: "Compile Error",
-  OLE: "Output Limit",
-  NO: "No Output",
-};
 
 /** "5:00:00.000" -> "5 jam"; "2:30:00.000" -> "2 jam 30 menit". */
 export function formatDurationLabel(
