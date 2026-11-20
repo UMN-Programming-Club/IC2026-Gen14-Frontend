@@ -1,33 +1,35 @@
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 interface Sponsor {
-  code: string;
+  /** Nama sponsor, dipakai sebagai teks alternatif dan tooltip. */
   name: string;
-  /** Warna lingkaran placeholder inisial (logo asli belum tersedia). */
-  color: string;
+  /** Path logo di /public/sponsors. */
+  logo: string;
 }
 
 const SPONSORS: Sponsor[] = [
-  { code: "GDC", name: "Game Dev Club", color: "#0e5a52" },
-  { code: "AW", name: "Art Works", color: "#8c1a1a" },
-  { code: "USC", name: "UMN Sports", color: "#0d3d3a" },
-  { code: "CDC", name: "Career Dev. Centre", color: "#1a6ae8" },
-  { code: "SR", name: "Sari Roti", color: "#cf4125" },
+  { name: "UESC", logo: "/sponsors/uesc.png" },
+  { name: "AW", logo: "/sponsors/aw.png" },
+  { name: "Game Dev Club", logo: "/sponsors/gdc.png" },
+  { name: "MANA Street Dance UMN", logo: "/sponsors/mana.png" },
+  { name: "Career Development Centre", logo: "/sponsors/cdc.png" },
+  { name: "Sari Roti", logo: "/sponsors/sari-roti.png" },
 ];
 
 function SponsorCard({ s }: { s: Sponsor }) {
   return (
-    <div className="flex h-[2.7rem] w-[9rem] shrink-0 items-center gap-2.5 rounded-lg bg-[#e0ece9] px-3 shadow-sm lg:h-[3.6rem] lg:w-[11.05rem] lg:gap-3 lg:rounded-[0.6rem] lg:px-4">
-      <span
-        className="grid size-[1.7rem] shrink-0 place-items-center rounded-full text-[0.55rem] font-bold text-white lg:size-[2.15rem] lg:text-[0.72rem]"
-        style={{ backgroundColor: s.color }}
-        aria-hidden="true"
-      >
-        {s.code}
-      </span>
-      <span className="truncate text-[0.75rem] font-medium text-[#0d2a27] lg:text-[0.9rem]">
-        {s.name}
-      </span>
+    <div
+      title={s.name}
+      className="relative h-[2.7rem] w-[9rem] shrink-0 rounded-lg bg-white shadow-sm lg:h-[3.6rem] lg:w-[11.05rem] lg:rounded-[0.6rem]"
+    >
+      <Image
+        src={s.logo}
+        alt={s.name}
+        fill
+        sizes="(min-width: 1024px) 177px, 144px"
+        className="object-contain p-1.5 lg:p-2"
+      />
     </div>
   );
 }

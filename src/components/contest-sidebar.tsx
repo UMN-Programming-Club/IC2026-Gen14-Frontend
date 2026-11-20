@@ -150,7 +150,7 @@ export function ContestSidebar() {
         <StarLogo className="size-[1.7rem] lg:size-[1.95rem]" />
         <div className="hidden leading-tight lg:block">
           <p className="text-[1.05rem] font-bold tracking-wide">UMNPC</p>
-          <p className="text-muted-foreground text-[0.72rem]">GEN XIV 2026</p>
+          <p className="text-muted-foreground text-[0.65rem]">INTERNAL CONTEST</p>
         </div>
       </div>
       <div className="film-strip mt-[1.1rem] ml-[0.2rem] hidden w-[11.4rem] rounded-l-full lg:block" />
