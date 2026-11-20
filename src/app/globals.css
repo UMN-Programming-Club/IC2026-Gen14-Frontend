@@ -5,50 +5,45 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Deep Sea Arena: palet dari DESIGN_REF/08-style-guide.png.
- * Catatan: `slate-800` dan `teal-600` sengaja menimpa warna bawaan Tailwind agar
- * namanya sama dengan style guide. Pakai nama ini untuk semua warna baru.
+ * Nama warna lama (branch design/arya) yang masih dipakai halaman Leaderboard, Problems, dan Topbar.
+ * Semuanya diarahkan ke palet Vikesh di :root di bawah, jadi halaman itu ikut desain utama.
+ * Untuk kode baru, pakai token Vikesh (teal, gold, success, danger, surface, line, ...).
  */
 @theme {
-  --color-ink-950: #0b0f10; /* latar utama */
-  --color-ink-900: #0c1112; /* rail, status bar */
-  --color-slate-800: #1a2324; /* panel */
-  --color-teal-600: #12695f; /* aksen tebal */
-  --color-aqua-400: #3fb8a6; /* aksen utama */
-  --color-aqua-200: #a6e6da; /* highlight */
-  --color-foam-50: #eaf7f4; /* teks utama */
-  --color-mist-400: #8fa8a5; /* teks sekunder */
-  --color-maroon-700: #8e1b1b; /* selesai, hasil akhir */
-  --color-brass-400: #c9a45c; /* peringkat 1 */
-
-  /* Turunan untuk permukaan dan garis */
-  --color-panel: #121a1b;
-  --color-panel-2: #162022;
-  --color-line: rgb(143 168 165 / 0.16);
-  --color-line-strong: rgb(143 168 165 / 0.34);
-
-  /* Status verdict */
-  --color-ok: #3ecf8e;
-  --color-wa: #f26d6d;
+  --color-ink-950: #0a1112; /* = --background */
+  --color-ink-900: #0d1517; /* = --sidebar */
+  --color-slate-800: #172224; /* = --secondary */
+  --color-teal-600: #0f6b5e;
+  --color-aqua-400: #40baa9; /* = --teal */
+  --color-aqua-200: #a8e8dc;
+  --color-foam-50: #eaf5f3; /* = --foreground */
+  --color-mist-400: #8ba3a0; /* = --muted-foreground */
+  --color-maroon-700: #5c2326;
+  --color-brass-400: #c9a45c; /* = --gold */
+  --color-panel: #121b1d; /* = --surface */
+  --color-panel-2: #172224;
+  --color-line-strong: #2a3a3c;
+  --color-ok: #2fc98e; /* = --success */
+  --color-wa: #e05a5a; /* = --danger */
   --color-tle: #f2a33a;
-  --color-pending: #5aa9f2;
-
-  --animate-marquee: marquee 48s linear infinite;
-  @keyframes marquee {
-    to {
-      transform: translateX(-50%);
-    }
-  }
 }
 
 @theme inline {
-  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jbmono), ui-monospace, "Cascadia Mono", monospace;
-  --font-display: var(--font-barlow), "Arial Narrow", Impact, sans-serif;
-  --font-heading: var(--font-sans);
-
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --font-display: var(--font-barlow), "Arial Narrow", sans-serif;
+  --font-heading: var(--font-sans);
+  --color-gold: var(--gold);
+  --color-teal: var(--teal);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-pending: var(--pending);
+  --color-surface: var(--surface);
+  --color-surface-deep: var(--surface-deep);
+  --color-line: var(--line);
+  --color-dim: var(--dim);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -87,41 +82,51 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Tema tunggal (gelap): token shadcn dipetakan ke palet Deep Sea Arena. */
 :root {
-  color-scheme: dark;
-  --background: #0b0f10;
-  --foreground: #eaf7f4;
-  --card: #121a1b;
-  --card-foreground: #eaf7f4;
-  --popover: #121a1b;
-  --popover-foreground: #eaf7f4;
-  --primary: #3fb8a6;
-  --primary-foreground: #0b0f10;
-  --secondary: #162022;
-  --secondary-foreground: #eaf7f4;
-  --muted: #162022;
-  --muted-foreground: #8fa8a5;
-  --accent: #162022;
-  --accent-foreground: #eaf7f4;
-  --destructive: #f26d6d;
-  --border: rgb(143 168 165 / 0.16);
-  --input: rgb(143 168 165 / 0.22);
-  --ring: #3fb8a6;
-  --chart-1: #a6e6da;
-  --chart-2: #3fb8a6;
-  --chart-3: #12695f;
-  --chart-4: #c9a45c;
-  --chart-5: #8e1b1b;
+  /* Tema gelap tunggal (desain UMNPC IC2026 Gen XIV). Nilai diambil dari gambar desain. */
+  --background: #0a1112;
+  --foreground: #eaf5f3;
+  --card: #121b1d;
+  --card-foreground: #eaf5f3;
+  --popover: #121b1d;
+  --popover-foreground: #eaf5f3;
+  --primary: #40baa9;
+  --primary-foreground: #06201c;
+  --secondary: #172224;
+  --secondary-foreground: #eaf5f3;
+  --muted: #172224;
+  --muted-foreground: #8ba3a0;
+  --accent: #173b38;
+  --accent-foreground: #eaf5f3;
+  --destructive: #e05a5a;
+  --border: #1f2d2f;
+  --input: #1f2d2f;
+  --ring: #40baa9;
+  --chart-1: #40baa9;
+  --chart-2: #c9a45c;
+  --chart-3: #2fc98e;
+  --chart-4: #e05a5a;
+  --chart-5: #4a9ee8;
   --radius: 0.625rem;
-  --sidebar: #0c1112;
-  --sidebar-foreground: #eaf7f4;
-  --sidebar-primary: #3fb8a6;
-  --sidebar-primary-foreground: #0b0f10;
-  --sidebar-accent: #10302d;
-  --sidebar-accent-foreground: #eaf7f4;
-  --sidebar-border: rgb(143 168 165 / 0.16);
-  --sidebar-ring: #3fb8a6;
+  --sidebar: #0d1517;
+  --sidebar-foreground: #eaf5f3;
+  --sidebar-primary: #40baa9;
+  --sidebar-primary-foreground: #06201c;
+  --sidebar-accent: #123330;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #1a2729;
+  --sidebar-ring: #40baa9;
+
+  /* Token merek */
+  --teal: #40baa9;
+  --gold: #c9a45c;
+  --success: #2fc98e;
+  --danger: #e05a5a;
+  --pending: #4a9ee8;
+  --surface: #121b1d;
+  --surface-deep: #0d1415;
+  --line: #1f2d2f;
+  --dim: #5f7774;
 }
 
 @layer base {
@@ -129,17 +134,89 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-ink-950 text-foam-50 font-sans;
+    @apply bg-background text-foreground;
   }
   html {
     @apply font-sans;
+    /* Skala fluid: 16px pada viewport acuan desain (1210x756), mengikuti sisi yang lebih sempit. */
+    font-size: clamp(11px, min(1.3223vw, 2.1164vh), 22px);
+    color-scheme: dark;
   }
-  ::selection {
-    background: rgb(63 184 166 / 0.35);
+  @media (max-width: 1023px) {
+    html {
+      font-size: 16px;
+    }
+  }
+  html,
+  body {
+    overflow: hidden;
   }
 }
 
-/* Judul besar: Barlow Condensed 800 miring, huruf kapital. */
+/* ---------- Dekorasi ---------- */
+
+/* Pola titik di latar, memudar ke bawah. */
+.bg-dots {
+  background-image: radial-gradient(
+    rgb(255 255 255 / 0.07) 1px,
+    transparent 1.2px
+  );
+  background-size: 0.75rem 0.75rem;
+  mask-image: linear-gradient(to bottom, #000 0%, transparent 62%);
+}
+
+/* Strip kotak-kotak emas (sidebar dan footer sponsor). */
+.film-strip {
+  height: 0.5rem;
+  background-image: linear-gradient(
+    90deg,
+    var(--gold) 0 0.5rem,
+    transparent 0.5rem 0.75rem
+  );
+  background-size: 0.75rem 100%;
+  opacity: 0.3;
+  mask-image: linear-gradient(to right, #000 55%, transparent 100%);
+}
+.film-strip-footer {
+  mask-image: none;
+}
+
+/* Marquee sponsor: geser kanan ke kiri, loop mulus (isi diduplikasi, geser 50%). */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.marquee-track {
+  animation: marquee 40s linear infinite;
+  width: max-content;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+}
+
+@keyframes pulse-dot {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pulse-dot {
+    animation: pulse-dot 1.6s ease-in-out infinite;
+  }
+}
+
+/* ---------- Utilitas dari branch design/arya (Leaderboard, Problems, Topbar) ---------- */
+
+/* Judul besar: Barlow Condensed miring, huruf kapital (sama dengan judul `font-display` Vikesh). */
 @utility title-display {
   font-family: var(--font-display);
   font-style: italic;
@@ -153,33 +230,23 @@
 @utility eyebrow {
   font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--color-mist-400);
+  color: var(--muted-foreground);
 }
 
 @utility panel {
   border-radius: 1rem;
-  border: 1px solid var(--color-line);
-  background-color: var(--color-panel);
+  border: 1px solid var(--line);
+  background-color: var(--surface);
 }
 
-/* Latar arena: cahaya teal di sudut + kisi titik halus. */
+/* Latar halaman non-Home: glow teal di atas + pola titik, seperti Home Vikesh. */
 @utility bg-arena {
   background-image:
-    radial-gradient(
-      60rem 26rem at 72% -8%,
-      rgb(18 105 95 / 0.2),
-      transparent 70%
-    ),
-    radial-gradient(circle, rgb(143 168 165 / 0.1) 1px, transparent 1px);
+    radial-gradient(60% 35% at 50% 0%, rgb(64 186 169 / 0.09), transparent 70%),
+    radial-gradient(rgb(255 255 255 / 0.05) 1px, transparent 1.2px);
   background-size:
     auto,
-    22px 22px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-marquee {
-    animation: none;
-  }
+    0.75rem 0.75rem;
 }

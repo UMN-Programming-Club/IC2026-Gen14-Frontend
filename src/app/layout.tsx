@@ -7,26 +7,22 @@ import {
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
-// Tipografi dari style guide: Display = Barlow Condensed 800 miring,
-// Heading/Body = Plus Jakarta Sans, Timer/angka = JetBrains Mono.
-const barlow = Barlow_Condensed({
-  variable: "--font-barlow",
-  subsets: ["latin"],
-  weight: "800",
-  style: "italic",
-  display: "swap",
-});
-
+/** Body: Plus Jakarta Sans. Headline condensed italic: Barlow Condensed. Angka/kode: JetBrains Mono. */
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
   subsets: ["latin"],
-  display: "swap",
 });
 
-const jbmono = JetBrains_Mono({
-  variable: "--font-jbmono",
+const barlow = Barlow_Condensed({
+  variable: "--font-barlow",
   subsets: ["latin"],
-  display: "swap",
+  weight: ["600", "700", "800", "900"],
+  style: ["italic"],
+});
+
+const jetbrains = JetBrains_Mono({
+  variable: "--font-jetbrains",
+  subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
@@ -35,7 +31,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b0f10",
+  themeColor: "#0a1112",
   colorScheme: "dark",
 };
 
@@ -43,9 +39,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="id"
-      className={`${barlow.variable} ${jakarta.variable} ${jbmono.variable} h-full antialiased`}
+      className={`${jakarta.variable} ${barlow.variable} ${jetbrains.variable} h-dvh antialiased`}
     >
-      <body className="flex min-h-full flex-col">
+      <body className="flex h-dvh flex-col">
         <Providers>{children}</Providers>
       </body>
     </html>
