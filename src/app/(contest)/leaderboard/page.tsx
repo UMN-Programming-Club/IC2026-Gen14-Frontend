@@ -1,7 +1,18 @@
 "use client";
 
-import { useMemo } from "react";
-import { Check, Compass, Radio, Snowflake, Star, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Compass,
+  Medal,
+  Minus,
+  Radio,
+  Snowflake,
+  Star,
+  X,
+} from "lucide-react";
 import { useContestClock } from "@/components/arena/contest-clock";
 import { PageContainer, PageTitle } from "@/components/arena/page-title";
 import { useContestInfo } from "@/components/contest-context";
@@ -20,22 +31,57 @@ import type {
 import { formatMinutes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-function Legend() {
+type Move = { dir: "up" | "down"; n: number };
+
+function MoveIndicator({ move }: { move?: Move }) {
+  if (move?.dir === "up")
+    return <ChevronUp className="text-ok size-4" strokeWidth={3} aria-label="Naik" />;
+  if (move?.dir === "down")
+    return <ChevronDown className="text-wa size-4" strokeWidth={3} aria-label="Turun" />;
+  return <Minus className="size-3 text-mist-400/50" aria-label="Tetap" />;
+}
+
+const MEDAL_COLOR: Record<number, string> = {
+  1: "text-brass-400", // emas, sesuai token style guide
+  2: "text-[#c5ced0]", // perak
+  3: "text-[#cd7f32]", // perunggu
+};
+
+function RankBadge({ rank }: { rank: number }) {
+  if (rank >= 1 && rank <= 3) {
+    return (
+      <span
+        role="img"
+        aria-label={`Peringkat ${rank}`}
+        className={cn("grid size-7 place-items-center", MEDAL_COLOR[rank])}
+      >
+        <Medal className="size-6" strokeWidth={2.25} aria-hidden="true" />
+      </span>
+    );
+  }
   return (
-    <ul className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
-      <li className="text-brass-400 flex items-center gap-1.5">
-        <Star className="size-3.5 fill-current" aria-hidden="true" /> first
-        solve
+    <span className="grid min-w-7 place-items-center text-xl font-bold text-foam-50">
+      {rank || "-"}
+    </span>
+  );
+}
+
+function Legend() {
+  const pill =
+    "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1 text-sm font-semibold";
+  return (
+    <ul className="flex flex-wrap items-center gap-2">
+      <li className={cn(pill, "border-brass-400/40 bg-brass-400/10 text-brass-400")}>
+        <Star className="size-3.5 fill-current" aria-hidden="true" /> First to Solve
       </li>
-      <li className="text-ok flex items-center gap-1.5">
-        <Check className="size-3.5" strokeWidth={3} aria-hidden="true" />{" "}
-        accepted
+      <li className={cn(pill, "border-ok/40 bg-ok/10 text-ok")}>
+        <Check className="size-3.5" strokeWidth={3} aria-hidden="true" /> Accepted
       </li>
-      <li className="text-wa flex items-center gap-1.5">
-        <X className="size-3.5" strokeWidth={3} aria-hidden="true" /> salah
+      <li className={cn(pill, "border-wa/40 bg-wa/10 text-wa")}>
+        <X className="size-3.5" strokeWidth={3} aria-hidden="true" /> Wrong
       </li>
-      <li className="text-pending flex items-center gap-1.5">
-        <Radio className="size-3.5" aria-hidden="true" /> pending
+      <li className={cn(pill, "border-pending/40 bg-pending/10 text-pending")}>
+        <Radio className="size-3.5" aria-hidden="true" /> Pending
       </li>
     </ul>
   );
@@ -81,7 +127,7 @@ function Cell({ p }: { p?: ScoreboardProblem }) {
   if (status === "pending") {
     return (
       <div
-        className={cn(CELL, "bg-pending/20 text-pending")}
+        className={cn(CELL, "pending-cell bg-pending/20 text-pending")}
         aria-label="Menunggu penilaian"
       >
         <Radio className="size-3.5" aria-hidden="true" />
@@ -159,6 +205,66 @@ export default function LeaderboardPage() {
     [teams.data],
   );
 
+  const rows = board.data?.rows;
+
+  // Pergerakan peringkat dibandingkan dari polling ke polling. Awalnya semua "-".
+  const prevRanks = useRef<Map<string, number> | null>(null);
+  const [moves, setMoves] = useState<Record<string, Move>>({});
+  useEffect(() => {
+    if (!rows) return;
+    const next = new Map(
+      rows.map((r) => [r.team_id ?? "", r.rank ?? 0] as const),
+    );
+    const prev = prevRanks.current;
+    prevRanks.current = next;
+    if (!prev) return;
+    setMoves((cur) => {
+      const out = { ...cur };
+      next.forEach((rank, id) => {
+        const was = prev.get(id);
+        if (was !== undefined && was !== rank)
+          out[id] = { dir: rank < was ? "up" : "down", n: (cur[id]?.n ?? 0) + 1 };
+      });
+      return out;
+    });
+  }, [rows]);
+
+  // Animasi geser baris (FLIP): catat posisi lama, bandingkan dengan posisi baru, lalu animasikan selisihnya.
+  const listRef = useRef<HTMLOListElement>(null);
+  const tops = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const next = new Map<string, number>();
+    list.querySelectorAll<HTMLLIElement>(":scope > li[data-team]").forEach((li) => {
+      const id = li.dataset.team ?? "";
+      const top = li.offsetTop - list.offsetTop;
+      next.set(id, top);
+      const prev = tops.current.get(id);
+      if (reduce || prev === undefined || prev === top) return;
+      const dy = prev - top;
+      const up = dy > 0;
+      li.style.zIndex = up ? "10" : "0";
+      const glow = "0 0 0 1px rgb(47 201 142 / 0.7), 0 0 28px rgb(47 201 142 / 0.35)";
+      const anim = li.animate(
+        [
+          {
+            transform: `translateY(${dy}px)`,
+            opacity: up ? 1 : 0.55,
+            boxShadow: up ? glow : "none",
+          },
+          { transform: "none", opacity: 1, boxShadow: "none" },
+        ],
+        { duration: 800, easing: "cubic-bezier(0.34, 1.4, 0.64, 1)" },
+      );
+      anim.onfinish = () => {
+        li.style.zIndex = "";
+      };
+    });
+    tops.current = next;
+  }, [rows]);
+
   const cols = problems.data ?? [];
   const frozen = !!board.data?.state?.frozen && !board.data?.state?.thawed;
   const frozenAtMs = board.data?.state?.frozen
@@ -170,13 +276,13 @@ export default function LeaderboardPage() {
       ? elapsedLabel(frozenAtMs - startMs)
       : null;
   // Kolom soal: 4 kolom tetap (#, tim, AC, penalti) lalu satu kolom per soal.
-  const grid = `3rem minmax(9rem,1.6fr) 4rem 5rem repeat(${Math.max(cols.length, 1)}, minmax(5.5rem,1fr))`;
+  const grid = `4.5rem minmax(9rem,1.6fr) 4rem 5rem repeat(${Math.max(cols.length, 1)}, minmax(5.5rem,1fr))`;
 
   return (
     <PageContainer>
       <PageTitle
-        white="Leader"
-        accent="board"
+        white="LEADER"
+        accent="BOARD"
         joined
         subtitle={
           frozen
@@ -212,7 +318,7 @@ export default function LeaderboardPage() {
           <p role="alert" className="text-wa p-8">
             {board.error.message}
           </p>
-        ) : board.data.rows.length === 0 ? (
+        ) : rows?.length === 0 ? (
           <p className="p-8 text-mist-400">Belum ada tim di leaderboard.</p>
         ) : (
           <div className="min-w-[56rem] p-4 sm:p-5">
@@ -220,7 +326,7 @@ export default function LeaderboardPage() {
               className="grid items-end gap-x-2 px-3 pb-4"
               style={{ gridTemplateColumns: grid }}
             >
-              <span className="eyebrow">#</span>
+              <span className="eyebrow">RANK</span>
               <span className="eyebrow">Tim</span>
               <span className="eyebrow text-center">AC</span>
               <span className="eyebrow text-center">Penalti</span>
@@ -248,35 +354,47 @@ export default function LeaderboardPage() {
               ))}
             </div>
 
-            <ol className="flex flex-col gap-1.5">
-              {board.data.rows.map((row) => {
+            <ol ref={listRef} className="flex flex-col gap-1.5">
+              {rows?.map((row) => {
                 const mine = row.team_id === teamId;
                 const rank = row.rank ?? 0;
                 const name = teamName.get(row.team_id) ?? row.team_id;
+                const move = moves[row.team_id ?? ""];
                 return (
                   <li
                     key={row.team_id}
+                    data-team={row.team_id}
                     aria-current={mine ? "true" : undefined}
                     className={cn(
-                      "grid items-center gap-x-2 rounded-xl border px-3 py-1.5",
-                      mine
-                        ? "border-aqua-400/70 bg-aqua-400/[0.06]"
-                        : "border-transparent",
+                      "group relative grid items-center gap-x-2 overflow-hidden rounded-xl px-3 py-1.5 transition-colors",
+                      mine && "bg-aqua-400/[0.08] hover:bg-aqua-400/[0.14]",
                     )}
                     style={{ gridTemplateColumns: grid }}
                   >
-                    <span
-                      className={cn(
-                        "text-xl font-bold",
-                        rank === 1 ? "text-brass-400" : "text-foam-50",
-                      )}
-                    >
-                      {rank || "-"}
+                    {mine && (
+                      <span
+                        aria-hidden="true"
+                        className="bg-aqua-400 absolute inset-y-0 left-0 w-1 transition-all group-hover:w-1.5"
+                      />
+                    )}
+                    {move && (
+                      <span
+                        key={move.n}
+                        aria-hidden="true"
+                        className={cn(
+                          "pointer-events-none absolute inset-0",
+                          move.dir === "up" ? "flash-up" : "flash-down",
+                        )}
+                      />
+                    )}
+                    <span className="flex items-center gap-1">
+                      <RankBadge rank={rank} />
+                      <MoveIndicator move={move} />
                     </span>
-                    <span className="flex min-w-0 items-center gap-2 font-bold">
+                    <span className="flex min-w-0 items-baseline gap-2 font-bold">
                       <span className="truncate">{name}</span>
                       {mine && (
-                        <span className="text-aqua-400 shrink-0 text-[0.65rem] font-bold tracking-widest">
+                        <span className="text-aqua-400 relative -top-0.3 shrink-0 text-[0.65rem] font-bold tracking-widest">
                           KAMU
                         </span>
                       )}
@@ -285,7 +403,7 @@ export default function LeaderboardPage() {
                       {row.score?.num_solved ?? 0}
                     </span>
                     <span className="text-center font-mono text-mist-400">
-                      {row.score?.total_time ?? 0}
+                      {`${row.score?.total_time ?? 0}'`}
                     </span>
                     {cols.map((c) => (
                       <Cell
