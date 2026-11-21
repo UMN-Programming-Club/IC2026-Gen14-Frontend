@@ -5,6 +5,7 @@ const SCENARIO_LABEL = {
   soon: "mulai sebentar lagi (~25 detik)",
   unscheduled: "belum dijadwalkan (start time kosong)",
   running: "berlangsung",
+  frozen: "berlangsung, leaderboard sudah dibekukan",
   ending: "hampir selesai (freeze ~25 dtk, selesai ~50 dtk)",
   ended: "selesai",
 } as const;

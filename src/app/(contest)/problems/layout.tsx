@@ -2,18 +2,18 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Check, Lock, Radio, X } from "lucide-react";
 import { useContestClock } from "@/components/arena/contest-clock";
 import { PageContainer, PageTitle } from "@/components/arena/page-title";
-import { useContestInfo } from "@/components/contest-context";
 import { useContestQuery } from "@/lib/api-client";
-import { cellStatus, type CellStatus } from "@/lib/contest-status";
-import type { ContestProblem, Scoreboard } from "@/lib/domjudge/types";
+import type { ContestProblem } from "@/lib/domjudge/types";
+import type { OutcomeStatus } from "@/lib/my-outcomes";
+import { useMyOutcomes } from "@/lib/use-my-outcomes";
 import { cn } from "@/lib/utils";
 
-function StatusIcon({ status }: { status: CellStatus }) {
-  if (status === "solved" || status === "first")
+function StatusIcon({ status }: { status: OutcomeStatus }) {
+  if (status === "solved")
     return (
       <Check className="text-ok size-5" strokeWidth={3} aria-label="Selesai" />
     );
@@ -27,15 +27,10 @@ function StatusIcon({ status }: { status: CellStatus }) {
 /** Kolom kiri (daftar soal) dipertahankan saat berpindah soal; kolom kanan = `children`. */
 export default function ProblemsLayout({ children }: { children: ReactNode }) {
   const { id: activeId } = useParams<{ id?: string }>();
-  const { teamId } = useContestInfo();
   const { phase } = useContestClock();
   const problems = useContestQuery<ContestProblem[]>("problems", 60_000);
-  const board = useContestQuery<Scoreboard>("scoreboard", 15_000);
-
-  const myRow = useMemo(
-    () => board.data?.rows.find((r) => r.team_id === teamId),
-    [board.data, teamId],
-  );
+  // Status dari submission + judgement tim sendiri, bukan scoreboard (yang ikut beku saat freeze).
+  const { outcomeOf } = useMyOutcomes();
 
   return (
     <PageContainer>
@@ -71,9 +66,7 @@ export default function ProblemsLayout({ children }: { children: ReactNode }) {
             <ul className="flex flex-col gap-3">
               {problems.data.map((p) => {
                 const active = p.id === activeId;
-                const status = cellStatus(
-                  myRow?.problems?.find((c) => c.problem_id === p.id),
-                );
+                const status = outcomeOf(p.id ?? "").status;
                 return (
                   <li key={p.id}>
                     <Link

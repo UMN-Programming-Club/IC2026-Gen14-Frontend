@@ -22,16 +22,8 @@ import { arenaButton } from "@/components/arena/button-styles";
 import { useContestClock } from "@/components/arena/contest-clock";
 import { useContestInfo } from "@/components/contest-context";
 import { useContestQuery } from "@/lib/api-client";
-import { cellStatus } from "@/lib/contest-status";
-import type {
-  ContestProblem,
-  Judgement,
-  JudgementType,
-  Language,
-  Scoreboard,
-  Submission,
-} from "@/lib/domjudge/types";
-import { latestVerdictByProblem } from "@/lib/verdicts";
+import type { ContestProblem, Language } from "@/lib/domjudge/types";
+import { useMyOutcomes } from "@/lib/use-my-outcomes";
 import { formatBytes, formatMinutes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -104,54 +96,43 @@ function StatBox({
 }
 
 function TeamStatus({ problemId }: { problemId: string }) {
-  const { teamId } = useContestInfo();
-  const board = useContestQuery<Scoreboard>("scoreboard", 15_000);
-  // Verdict submission terakhir (mis. "Runtime Error"), sama seperti di Home.
-  const submissions = useContestQuery<Submission[]>("submissions", 5_000);
-  const judgements = useContestQuery<Judgement[]>("judgements", 5_000);
-  const jtypes = useContestQuery<JudgementType[]>("judgement-types", 300_000);
-  const lastVerdict = latestVerdictByProblem(
-    submissions.data,
-    judgements.data,
-    jtypes.data,
-  ).get(problemId);
-  const cell = board.data?.rows
-    .find((r) => r.team_id === teamId)
-    ?.problems?.find((p) => p.problem_id === problemId);
-  const status = cellStatus(cell);
+  // Dari submission + judgement tim sendiri (bukan scoreboard), supaya tetap akurat dan cepat berubah
+  // juga saat leaderboard dibekukan.
+  const { outcomeOf, loading } = useMyOutcomes();
+  const outcome = outcomeOf(problemId);
 
   let content: React.ReactNode = (
     <span className="text-mist-400">Belum ada submission</span>
   );
-  if (board.isPending) content = <span className="text-mist-400">...</span>;
-  else if (cell && (status === "solved" || status === "first")) {
+  if (loading) content = <span className="text-mist-400">...</span>;
+  else if (outcome.status === "solved") {
     content = (
       <>
         <span className="bg-ok/15 text-ok inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold">
           <Check className="size-3.5" strokeWidth={3} /> Accepted
         </span>
         <span className="font-mono text-sm text-mist-400">
-          {formatMinutes(cell.time ?? 0)}
+          {formatMinutes(outcome.solvedMinutes ?? 0)}
         </span>
       </>
     );
-  } else if (cell && status === "pending") {
+  } else if (outcome.status === "pending") {
     content = (
       <span className="bg-pending/15 text-pending inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold">
         <Radio className="size-3.5" /> Pending
       </span>
     );
-  } else if (cell && status === "failed") {
+  } else if (outcome.status === "failed") {
     content = (
       <>
         <span className="bg-wa/15 text-wa inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold">
           <X className="size-3.5" strokeWidth={3} />{" "}
-          {lastVerdict && lastVerdict.kind === "wrong"
-            ? lastVerdict.text
+          {outcome.latest && outcome.latest.kind === "wrong"
+            ? outcome.latest.text
             : "Belum benar"}
         </span>
         <span className="font-mono text-sm text-mist-400">
-          {cell.num_judged} percobaan
+          {outcome.judged} percobaan
         </span>
       </>
     );

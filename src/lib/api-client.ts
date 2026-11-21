@@ -41,11 +41,21 @@ export async function getJson<T>(
   return body as T;
 }
 
-export function useContestQuery<T>(path: string, refetchMs?: number) {
+/**
+ * `refetchMs` boleh berupa fungsi: dipanggil setiap selesai mengambil data untuk menentukan jeda
+ * berikutnya (mis. lebih cepat selama ada submission yang masih dinilai).
+ */
+export function useContestQuery<T>(
+  path: string,
+  refetchMs?: number | ((data: T | undefined) => number),
+) {
   return useQuery({
     queryKey: ["contest", path],
     queryFn: ({ signal }) => getJson<T>(path, signal),
-    refetchInterval: refetchMs,
+    refetchInterval:
+      typeof refetchMs === "function"
+        ? (query) => refetchMs(query.state.data)
+        : refetchMs,
     refetchIntervalInBackground: false,
     retry: (count, error) =>
       !(error instanceof ApiError && error.status < 500) && count < 2,

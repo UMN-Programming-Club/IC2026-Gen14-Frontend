@@ -17,6 +17,7 @@ import { useContestClock } from "@/components/arena/contest-clock";
 import { PageContainer, PageTitle } from "@/components/arena/page-title";
 import { useContestInfo } from "@/components/contest-context";
 import { useContestQuery } from "@/lib/api-client";
+import { boardInterval } from "@/lib/polling";
 import {
   PROBLEM_FALLBACK_COLORS,
   cellStatus,
@@ -195,7 +196,7 @@ function FrozenBanner({
 export default function LeaderboardPage() {
   const { teamId, contest } = useContestInfo();
   const { phase } = useContestClock();
-  const board = useContestQuery<Scoreboard>("scoreboard", 15_000);
+  const board = useContestQuery<Scoreboard>("scoreboard", boardInterval);
   const teams = useContestQuery<Team[]>("teams", 60_000);
   const problems = useContestQuery<ContestProblem[]>("problems", 60_000);
 
