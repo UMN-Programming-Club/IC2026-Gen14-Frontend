@@ -16,7 +16,15 @@ const schema = z
     DOMJUDGE_MOCK_SCENARIO: z.preprocess(
       emptyToUndefined,
       z
-        .enum(["before", "soon", "unscheduled", "running", "ending", "ended"])
+        .enum([
+          "before",
+          "soon",
+          "unscheduled",
+          "running",
+          "frozen",
+          "ending",
+          "ended",
+        ])
         .default("running"),
     ),
     /** Hanya mode mock: jam "DOMjudge" tertinggal sekian detik dari jam mesin, seperti WSL/VPS yang jamnya melenceng. */
@@ -34,6 +42,15 @@ const schema = z
     DOMJUDGE_READER_PASSWORD: z.preprocess(
       emptyToUndefined,
       z.string().optional(),
+    ),
+    /**
+     * Opsional. Kunci rahasia yang dikirim ke DOMjudge sebagai header `X-DJ-Gate` pada SETIAP panggilan.
+     * Wajib bila nginx DOMjudge membatasi /api dan /public (BACKEND_SETUP.md bagian 10.7). Hanya server;
+     * jangan pernah memberi awalan NEXT_PUBLIC_.
+     */
+    DOMJUDGE_GATE_KEY: z.preprocess(
+      emptyToUndefined,
+      z.string().min(16).max(64).optional(),
     ),
     SESSION_SECRET: z
       .string()
@@ -81,5 +98,7 @@ export const env = {
           password: parsed.data.DOMJUDGE_READER_PASSWORD,
         }
       : null,
+  /** null bila nginx DOMjudge tidak memakai gerbang kunci. */
+  GATE_KEY: parsed.data.DOMJUDGE_GATE_KEY ?? null,
   SESSION_SECRET: parsed.data.SESSION_SECRET,
 };

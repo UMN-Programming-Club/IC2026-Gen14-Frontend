@@ -68,7 +68,9 @@ function seed(): MockState {
             ? now - CONTEST_DURATION_MS - 5 * MIN
             : scenario === "ending"
               ? now - CONTEST_DURATION_MS + 50_000 // freeze ~25 dtk lagi, selesai ~50 dtk lagi
-              : now - RUNNING_ELAPSED_MIN * MIN;
+              : scenario === "frozen"
+                ? now - CONTEST_DURATION_MS + 10 * MIN // freeze sudah mulai 5 menit lalu, selesai 10 menit lagi
+                : now - RUNNING_ELAPSED_MIN * MIN;
 
   // Sebelum contest dimulai belum ada submission.
   const seeds =
@@ -253,6 +255,8 @@ function resultFor(
   problems: ContestProblem[],
   startMs: number,
   now: number,
+  /** Epoch ms mulai freeze bila scoreboard sedang beku. Seperti DOMjudge: submission sejak saat itu tampil "pending". */
+  frozenFrom: number | null,
 ): TeamResult {
   let solved = 0;
   let totalTime = 0;
@@ -270,7 +274,7 @@ function resultFor(
 
     for (const s of attempts) {
       if (acAt !== undefined) break; // submission setelah AC tidak dihitung
-      if (isPending(s, now)) {
+      if (isPending(s, now) || (frozenFrom !== null && s.at >= frozenFrom)) {
         pending++;
         continue;
       }
@@ -307,8 +311,18 @@ function resultFor(
 export function buildScoreboard(now: number): Scoreboard {
   const state = getState();
   const problems = visibleProblems(now);
+  const freezeAt = state.startMs + CONTEST_DURATION_MS - freezeDurationMs();
+  const frozenFrom =
+    getPhase(now) !== "before" && now >= freezeAt ? freezeAt : null;
   const results = TEAMS.map((t) =>
-    resultFor(t.id as string, state.submissions, problems, state.startMs, now),
+    resultFor(
+      t.id as string,
+      state.submissions,
+      problems,
+      state.startMs,
+      now,
+      frozenFrom,
+    ),
   );
 
   // first-to-solve: AC paling awal per soal

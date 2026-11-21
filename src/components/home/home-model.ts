@@ -8,6 +8,7 @@ import type {
 
 export type Phase = "before" | "running" | "ended";
 export type ChipStatus = "solved" | "wrong" | "pending" | "none";
+import type { OutcomeStatus, ProblemOutcome } from "@/lib/my-outcomes";
 import { VERDICT_TEXT, type VerdictKind } from "@/lib/verdicts";
 
 export type { VerdictKind };
@@ -64,10 +65,15 @@ export function formatContestTime(t?: string | null) {
   return `${h.padStart(2, "0")}:${m}:${s}`;
 }
 
+/**
+ * Status tiap soal diambil dari `outcomes` (submission + judgement tim sendiri), bukan sel scoreboard,
+ * karena scoreboard publik ikut beku saat freeze. Scoreboard hanya dipakai bila daftar soal belum ada.
+ */
 export function buildChips(
   problems: ContestProblem[] | undefined,
   board: Scoreboard | undefined,
   teamId: string,
+  outcomes: Map<string, ProblemOutcome>,
 ): ProblemChip[] {
   const row = board?.rows.find((r) => r.team_id === teamId);
   const list: { id: string; label: string }[] = problems?.length
@@ -76,14 +82,16 @@ export function buildChips(
         id: p.problem_id as string,
         label: `IC${i + 1}`,
       }));
-  return list.map((p) => {
-    const cell = row?.problems?.find((x) => x.problem_id === p.id);
-    let status: ChipStatus = "none";
-    if (cell?.solved) status = "solved";
-    else if ((cell?.num_pending ?? 0) > 0) status = "pending";
-    else if ((cell?.num_judged ?? 0) > 0) status = "wrong";
-    return { label: p.label, status };
-  });
+  const chipOf: Record<OutcomeStatus, ChipStatus> = {
+    solved: "solved",
+    pending: "pending",
+    failed: "wrong",
+    none: "none",
+  };
+  return list.map((p) => ({
+    label: p.label,
+    status: chipOf[outcomes.get(p.id)?.status ?? "none"],
+  }));
 }
 
 export function buildRows(

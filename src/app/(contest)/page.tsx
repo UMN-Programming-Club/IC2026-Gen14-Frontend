@@ -23,14 +23,10 @@ import {
 } from "@/components/home/home-views";
 import { SponsorMarquee } from "@/components/home/sponsor-marquee";
 import { useContestQuery } from "@/lib/api-client";
-import type {
-  ContestProblem,
-  Judgement,
-  JudgementType,
-  Scoreboard,
-  Submission,
-} from "@/lib/domjudge/types";
+import type { ContestProblem, Scoreboard } from "@/lib/domjudge/types";
 import { EVENT } from "@/lib/event";
+import { boardInterval } from "@/lib/polling";
+import { useMyOutcomes } from "@/lib/use-my-outcomes";
 
 const PREVIEW_KEYS: PreviewKey[] = [
   "before",
@@ -48,11 +44,9 @@ export default function HomePage() {
   const startMs = clock.start;
   const endMs = clock.end;
 
-  const board = useContestQuery<Scoreboard>("scoreboard", 15_000);
+  const board = useContestQuery<Scoreboard>("scoreboard", boardInterval);
   const problems = useContestQuery<ContestProblem[]>("problems", 60_000);
-  const submissions = useContestQuery<Submission[]>("submissions", 5_000);
-  const judgements = useContestQuery<Judgement[]>("judgements", 5_000);
-  const jtypes = useContestQuery<JudgementType[]>("judgement-types", 300_000);
+  const { submissions, judgements, jtypes, outcomes } = useMyOutcomes();
 
   // Preview 4 state (hanya development): /?preview=before|running-empty|running|ended
   const previewParam = useSearchParams().get("preview") as PreviewKey | null;
@@ -67,7 +61,7 @@ export default function HomePage() {
     const phase: Phase = clock.phase ?? "before";
 
     const row = board.data?.rows.find((r) => r.team_id === teamId);
-    const chips = buildChips(problems.data, board.data, teamId);
+    const chips = buildChips(problems.data, board.data, teamId, outcomes);
     const mySubmissions = (submissions.data ?? []).filter(
       (s) => s.team_id === teamId,
     );
@@ -91,7 +85,10 @@ export default function HomePage() {
         problems.data?.length || chips.length || EVENT.problemCount || null,
       stats: {
         rank: row?.rank ?? null,
-        solved: row?.score?.num_solved ?? 0,
+        // Jumlah soal terjawab dari status tim sendiri, supaya tetap benar saat leaderboard beku.
+        // Peringkat dan penalti tetap dari scoreboard resmi.
+        solved: [...outcomes.values()].filter((o) => o.status === "solved")
+          .length,
         penalty: row?.score?.total_time ?? 0,
         submissionCount: mySubmissions.length,
       },
@@ -110,6 +107,7 @@ export default function HomePage() {
     submissions.data,
     judgements.data,
     jtypes.data,
+    outcomes,
     contest.duration,
     startMs,
     endMs,
