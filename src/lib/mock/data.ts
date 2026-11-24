@@ -57,8 +57,8 @@ export const PROBLEMS: ContestProblem[] = [
   statement: [
     {
       href: `contests/${MOCK_CONTEST_ID}/problems/${p.id}/statement`,
-      mime: "text/html",
-      filename: `${p.id}.html`,
+      mime: "application/pdf",
+      filename: `${p.id}.pdf`,
     },
   ],
 }));
@@ -170,23 +170,86 @@ export const SEED_SUBMISSIONS: SeedSubmission[] = [
   s("siren", "ic1", 90, "cpp", "WA"),
 ];
 
-/** Statement versi HTML (DOMjudge sungguhan biasanya mengirim PDF). Isinya placeholder. */
-export function statementHtml(p: ContestProblem): string {
-  return `<!doctype html>
-<html lang="id"><head><meta charset="utf-8"><title>${p.label} ${p.name}</title>
-<style>
-body{font:16px/1.6 system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;color:#18181b}
-h1{margin-bottom:.25rem} .meta{color:#71717a;margin-top:0}
-pre{background:#f4f4f5;padding:.75rem 1rem;border-radius:.5rem;overflow:auto}
-.mock{background:#fef3c7;color:#92400e;padding:.5rem .75rem;border-radius:.5rem;font-size:.875rem}
-</style></head><body>
-<p class="mock">Statement contoh (mode mock). Pada DOMjudge sungguhan, ini berupa PDF dari panitia.</p>
-<h1>${p.label}. ${p.name}</h1>
-<p class="meta">Batas waktu: ${p.time_limit} detik</p>
-<p>Ini hanya teks pengganti agar halaman soal bisa dirancang. Deskripsi, format input, format output, dan contoh
-kasus uji akan muncul di sini pada contest sungguhan.</p>
-<h2>Contoh</h2>
-<p>Input</p><pre>3 4</pre>
-<p>Output</p><pre>7</pre>
-</body></html>`;
+/** Escape teks untuk string literal PDF. Hanya ASCII. */
+function pdfText(t: string): string {
+  return t.replace(/[\\()]/g, (c) => `\\${c}`).replace(/[^\x20-\x7e]/g, "?");
+}
+
+/**
+ * Statement contoh berupa PDF (seperti DOMjudge sungguhan), dua halaman A4, dibangun manual tanpa
+ * dependensi. Isinya placeholder, cukup untuk menguji viewer PDF di halaman soal.
+ */
+export function statementPdf(p: ContestProblem): Uint8Array<ArrayBuffer> {
+  const line = (x: number, y: number, size: number, text: string) =>
+    `BT /F1 ${size} Tf ${x} ${y} Td (${pdfText(text)}) Tj ET`;
+  const pages: string[][] = [
+    [
+      line(
+        56,
+        780,
+        10,
+        "STATEMENT CONTOH (MODE MOCK) - pada contest sungguhan berupa PDF dari panitia",
+      ),
+      line(56, 740, 24, `${p.label}. ${p.name}`),
+      line(56, 715, 11, `Batas waktu: ${p.time_limit} detik`),
+      line(56, 680, 14, "Deskripsi"),
+      line(
+        56,
+        660,
+        11,
+        "Ini hanya teks pengganti agar halaman soal bisa dirancang. Deskripsi, format input,",
+      ),
+      line(
+        56,
+        645,
+        11,
+        "format output, dan contoh kasus uji akan muncul di sini pada contest sungguhan.",
+      ),
+      line(56, 610, 14, "Format input"),
+      line(
+        56,
+        590,
+        11,
+        "Satu baris berisi dua bilangan bulat A dan B (1 <= A, B <= 10^9).",
+      ),
+      line(56, 555, 14, "Format output"),
+      line(56, 535, 11, "Satu baris berisi A + B."),
+      line(56, 80, 9, "Halaman 1 dari 2"),
+    ],
+    [
+      line(56, 780, 14, "Contoh"),
+      line(56, 755, 11, "Input"),
+      line(72, 737, 11, "3 4"),
+      line(56, 710, 11, "Output"),
+      line(72, 692, 11, "7"),
+      line(56, 80, 9, "Halaman 2 dari 2"),
+    ],
+  ];
+
+  const objects: string[] = [];
+  const pageIds = pages.map((_, i) => 4 + i * 2);
+  objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
+  objects[2] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`;
+  objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+  pages.forEach((content, i) => {
+    const stream = content.join("\n");
+    objects[pageIds[i]] =
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${pageIds[i] + 1} 0 R >>`;
+    objects[pageIds[i] + 1] =
+      `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+  });
+
+  let out = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  for (let id = 1; id < objects.length; id++) {
+    offsets[id] = out.length;
+    out += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+  }
+  const xref = out.length;
+  out += `xref\n0 ${objects.length}\n0000000000 65535 f \n`;
+  for (let id = 1; id < objects.length; id++) {
+    out += `${String(offsets[id]).padStart(10, "0")} 00000 n \n`;
+  }
+  out += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return new TextEncoder().encode(out);
 }

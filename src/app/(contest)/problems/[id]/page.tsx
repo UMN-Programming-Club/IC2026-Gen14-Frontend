@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useEffect,
   useRef,
   useState,
   type DragEvent,
@@ -11,8 +12,9 @@ import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
-  ArrowUpRight,
   Check,
+  Maximize2,
+  Minimize2,
   Radio,
   Upload,
   X,
@@ -146,6 +148,118 @@ function TeamStatus({ problemId }: { problemId: string }) {
   );
 }
 
+type ViewMode = "inline" | "native" | "overlay";
+
+/**
+ * Statement soal (PDF) langsung tampil di halaman, dengan tombol layar penuh. Layar penuh memakai
+ * Fullscreen API browser; bila ditolak/tidak tersedia, jatuh ke overlay satu layar (Esc untuk keluar).
+ */
+function StatementViewer({
+  problemId,
+  title,
+}: {
+  problemId: string;
+  title: string;
+}) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [mode, setMode] = useState<ViewMode>("inline");
+  const [loaded, setLoaded] = useState(false);
+  const url = `/api/contest/problems/${encodeURIComponent(problemId)}/statement`;
+  const expanded = mode !== "inline";
+
+  useEffect(() => {
+    const onChange = () => {
+      const active = document.fullscreenElement === boxRef.current;
+      setMode((m) => (active ? "native" : m === "native" ? "inline" : m));
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  useEffect(() => {
+    if (mode !== "overlay") return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setMode("inline");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode]);
+
+  async function toggle() {
+    if (mode === "native") {
+      await document.exitFullscreen().catch(() => setMode("inline"));
+      return;
+    }
+    if (mode === "overlay") {
+      setMode("inline");
+      return;
+    }
+    const el = boxRef.current;
+    try {
+      if (!el?.requestFullscreen) throw new Error("unsupported");
+      await el.requestFullscreen();
+    } catch {
+      setMode("overlay");
+    }
+  }
+
+  const iconButton =
+    "focus-visible:ring-aqua-400/60 inline-flex items-center gap-2 rounded-lg border border-line-strong px-3 py-2 text-xs font-bold tracking-[0.08em] text-aqua-400 uppercase transition-colors outline-none hover:border-aqua-400/60 hover:bg-aqua-400/10 focus-visible:ring-2";
+
+  return (
+    <div
+      ref={boxRef}
+      className={cn(
+        "flex flex-col",
+        expanded
+          ? "bg-ink-950 h-full w-full gap-3 p-3"
+          : "border-line bg-ink-900/60 mt-5 gap-3 rounded-xl border p-3",
+        mode === "overlay" && "fixed inset-0 z-50",
+      )}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <p className="eyebrow truncate">{expanded ? title : "Soal lengkap"}</p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={toggle}
+            aria-pressed={expanded}
+            className={iconButton}
+          >
+            {expanded ? (
+              <>
+                Keluar layar penuh <Minimize2 className="size-3.5" />
+              </>
+            ) : (
+              <>
+                Layar penuh <Maximize2 className="size-3.5" />
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-lg bg-white",
+          expanded ? "min-h-0 flex-1" : "h-[72vh] min-h-[28rem]",
+        )}
+      >
+        {!loaded && (
+          <p className="bg-ink-900 absolute inset-0 flex items-center justify-center text-sm text-mist-400">
+            Memuat soal...
+          </p>
+        )}
+        <iframe
+          src={`${url}#navpanes=0&view=FitH&zoom=page-width`}
+          title={`Statement ${title}`}
+          onLoad={() => setLoaded(true)}
+          className="size-full border-0"
+        />
+      </div>
+    </div>
+  );
+}
+
 function InfoTab({
   problem,
   languages,
@@ -173,14 +287,11 @@ function InfoTab({
       <TeamStatus problemId={id} />
 
       {hasStatement ? (
-        <a
-          href={`/api/contest/problems/${encodeURIComponent(id)}/statement`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={arenaButton("primary", "mt-5 w-full justify-between py-4")}
-        >
-          Baca soal lengkap <ArrowUpRight className="size-4" />
-        </a>
+        <StatementViewer
+          key={id}
+          problemId={id}
+          title={`${problem.label ?? ""} · ${problem.name ?? ""}`}
+        />
       ) : (
         <p className="border-line mt-5 rounded-xl border px-5 py-4 text-sm text-mist-400">
           Statement belum tersedia.

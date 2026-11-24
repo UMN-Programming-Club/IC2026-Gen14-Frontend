@@ -253,7 +253,7 @@ function ChipIcon({ status }: { status: ChipStatus }) {
 
 function ProgressCard({ chips }: { chips: ProblemChip[] }) {
   return (
-    <Card className="border-line bg-surface gap-0 rounded-2xl border px-4 py-3 ring-0 lg:px-[1.3rem] lg:py-[1.1rem]">
+    <Card className="border-line bg-surface shrink-0 gap-0 rounded-2xl border px-4 py-3 ring-0 lg:px-[1.3rem] lg:py-[1.1rem]">
       <p className={LABEL}>Progres Soal</p>
       <div
         className="mt-2.5 grid grid-cols-3 gap-2 lg:mt-[0.8rem] lg:[grid-template-columns:repeat(var(--n),minmax(0,1fr))] lg:gap-[0.65rem]"
@@ -326,13 +326,105 @@ function useFitCount(
   return count;
 }
 
+type EmptyMode = "full" | "compact" | "row";
+
+/**
+ * Bentuk tampilan "Belum ada submission" menurut tinggi yang tersedia, supaya tombol
+ * "Buka Problemset" selalu terlihat utuh (dulu terpotong di layar laptop ~768-1080px / zoom > 100%).
+ * full = sesuai desain (butuh ~11,3rem); compact = ikon di samping judul, jarak dirapatkan (~8,5rem,
+ * yang biasa didapat di layar laptop karena ukuran rem mengikuti tinggi layar); row = satu baris.
+ */
+function useEmptyMode(ref: RefObject<HTMLElement | null>): EmptyMode {
+  const [mode, setMode] = useState<EmptyMode>("full");
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const rem = parseFloat(
+        getComputedStyle(document.documentElement).fontSize,
+      );
+      const h = el.clientHeight / rem;
+      setMode(h >= 11.3 ? "full" : h >= 8.7 ? "compact" : "row");
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return mode;
+}
+
+function OpenProblemsetButton({ className }: { className?: string }) {
+  return (
+    <Button
+      variant="outline"
+      render={<Link href="/problems" />}
+      nativeButton={false}
+      className={cn(
+        "border-teal/60 text-teal hover:bg-teal/10 hover:text-teal h-[2.1rem] shrink-0 rounded-lg bg-transparent px-5 text-[0.76rem] font-bold tracking-[0.08em] uppercase lg:h-[2.2rem] lg:px-[1.5rem]",
+        className,
+      )}
+    >
+      Buka Problemset
+      <ArrowRight className="size-4" strokeWidth={2.5} />
+    </Button>
+  );
+}
+
+function EmptySubmissions({ mode }: { mode: EmptyMode }) {
+  if (mode === "row") {
+    return (
+      <div className="flex flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 pb-3 lg:px-[1.3rem]">
+        <p className="flex items-center gap-2 text-[0.95rem] font-semibold">
+          <Radio className="text-teal size-[1.1rem] shrink-0" />
+          Belum ada submission
+        </p>
+        <OpenProblemsetButton />
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-1 flex-col">
+      <div className="bg-surface-deep hidden h-[1.9rem] shrink-0 items-center px-[1.3rem] md:flex">
+        <HeadCells />
+      </div>
+      {mode === "full" ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-4 py-2 text-center">
+          <Radio className="text-teal size-[1.2rem] lg:size-[1.4rem]" />
+          <p className="mt-1 text-[0.95rem] font-semibold lg:text-[1.02rem]">
+            Belum ada submission
+          </p>
+          <p className="text-muted-foreground text-[0.8rem] lg:text-[0.88rem]">
+            Submission tim kamu akan muncul di sini.
+          </p>
+          <OpenProblemsetButton className="mt-2 lg:mt-[0.9rem]" />
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-4 py-1 text-center">
+          <p className="flex items-center gap-2 text-[0.95rem] font-semibold lg:text-[1.02rem]">
+            <Radio className="text-teal size-[1.1rem] shrink-0 lg:size-[1.25rem]" />
+            Belum ada submission
+          </p>
+          <p className="text-muted-foreground text-[0.8rem] lg:text-[0.88rem]">
+            Submission tim kamu akan muncul di sini.
+          </p>
+          <OpenProblemsetButton className="mt-2" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SubmissionsCard({ rows }: { rows: SubmissionRow[] }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const tableCount = useFitCount(bodyRef, 2.7, 1.9, 4);
   const listCount = useFitCount(bodyRef, 3.4, 0, 3);
+  const emptyMode = useEmptyMode(bodyRef);
 
   return (
-    <Card className="border-line bg-surface min-h-0 flex-1 gap-0 rounded-2xl border py-0 ring-0">
+    // min-h: kartu tidak pernah menyusut sampai isinya terpotong. Bila layar terlalu pendek,
+    // area konten Home yang di-scroll (lihat RunningView), bukan isi kartu yang hilang.
+    <Card className="border-line bg-surface min-h-[7.5rem] flex-1 gap-0 rounded-2xl border py-0 ring-0">
       <p
         className={cn(
           LABEL,
@@ -346,29 +438,7 @@ function SubmissionsCard({ rows }: { rows: SubmissionRow[] }) {
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
       >
         {rows.length === 0 ? (
-          <div className="flex flex-1 flex-col">
-            <div className="bg-surface-deep hidden h-[1.9rem] items-center px-[1.3rem] md:flex">
-              <HeadCells />
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-4 py-2 text-center">
-              <Radio className="text-teal size-[1.2rem] lg:size-[1.4rem]" />
-              <p className="mt-1 text-[0.95rem] font-semibold lg:text-[1.02rem]">
-                Belum ada submission
-              </p>
-              <p className="text-muted-foreground text-[0.8rem] lg:text-[0.88rem]">
-                Submission tim kamu akan muncul di sini.
-              </p>
-              <Button
-                variant="outline"
-                render={<Link href="/problems" />}
-                nativeButton={false}
-                className="border-teal/60 text-teal hover:bg-teal/10 hover:text-teal mt-2 h-[2.1rem] rounded-lg bg-transparent px-5 text-[0.76rem] font-bold tracking-[0.08em] uppercase lg:mt-[0.9rem] lg:h-[2.2rem] lg:px-[1.5rem]"
-              >
-                Buka Problemset
-                <ArrowRight className="size-4" strokeWidth={2.5} />
-              </Button>
-            </div>
-          </div>
+          <EmptySubmissions mode={emptyMode} />
         ) : (
           <>
             {/* Tablet dan desktop: tabel */}
@@ -468,8 +538,8 @@ export function RunningView({
   const hasSubs = stats.submissionCount > 0;
   const showRank = hasSubs && stats.rank !== null;
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-3 lg:gap-[1rem] lg:px-[2.1rem] lg:pb-[2.2rem]">
-      <header className="lg:pt-[1.9rem] lg:pb-[0.4rem]">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-3 lg:gap-[1rem] lg:px-[2.1rem] lg:pb-[2.2rem]">
+      <header className="shrink-0 lg:pt-[1.9rem] lg:pb-[0.4rem]">
         <h1 className="font-display text-[1.7rem] leading-none font-extrabold uppercase italic lg:text-[2.4rem]">
           Selamat datang, <span className="text-teal">{teamName}</span>
         </h1>
@@ -480,7 +550,7 @@ export function RunningView({
         </p>
       </header>
 
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-[1.05rem]">
+      <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-[1.05rem]">
         <StatCard
           label="Peringkat"
           icon={
