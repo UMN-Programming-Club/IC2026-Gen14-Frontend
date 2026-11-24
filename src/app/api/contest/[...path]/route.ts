@@ -69,13 +69,21 @@ export async function GET(
       stripProblems = phase === "ended";
     }
 
+    // Statement soal (PDF) ditampilkan di dalam halaman soal lewat <iframe>.
+    const isStatement =
+      path[0] === "problems" && path.length === 3 && path[2] === "statement";
+
     const search = new URL(request.url).search;
     const upstream = await djFetch(
       user,
       `/contests/${contest.id}/${path.join("/")}${search}`,
       {
         headers: {
-          Accept: request.headers.get("accept") ?? "application/json",
+          // Navigasi iframe mengirim Accept "text/html,...". Untuk statement minta apa saja,
+          // supaya negosiasi format DOMjudge tidak menolaknya.
+          Accept: isStatement
+            ? "*/*"
+            : (request.headers.get("accept") ?? "application/json"),
         },
       },
     );
@@ -86,6 +94,20 @@ export async function GET(
       if (v) headers.set(h, v);
     }
     headers.set("Cache-Control", "no-store");
+    if (isStatement && upstream.ok) {
+      // Paksa "inline": tanpa ini browser bisa mengunduh PDF alih-alih menampilkannya di iframe.
+      const type = upstream.headers.get("content-type") ?? "";
+      const ext = type.includes("pdf")
+        ? ".pdf"
+        : type.includes("html")
+          ? ".html"
+          : ".txt";
+      const filename = `${path[1]}${ext}`.replace(/[^A-Za-z0-9_.-]/g, "_");
+      headers.set("Content-Disposition", `inline; filename="${filename}"`);
+      headers.set("X-Content-Type-Options", "nosniff");
+      // Hanya boleh disematkan oleh halaman situs ini sendiri.
+      headers.set("Content-Security-Policy", "frame-ancestors 'self'");
+    }
     // Jam DOMjudge (header Date-nya, resolusi 1 detik) untuk menyelaraskan jam hitung mundur di browser.
     const djDate = Date.parse(upstream.headers.get("date") ?? "");
     if (Number.isFinite(djDate)) {

@@ -15,7 +15,7 @@ import {
   MOCK_NEWBIE_TEAM_ID,
   PROBLEMS,
   TEAMS,
-  statementHtml,
+  statementPdf,
 } from "./data";
 import {
   addSubmission,
@@ -197,8 +197,14 @@ export async function mockFetch(request: Request): Promise<Response> {
       const problem = visible.find((p) => p.id === id);
       if (!problem) return error(404, `Problem with ID '${id}' not found`);
       if (extra === "statement") {
-        return new Response(statementHtml(problem), {
-          headers: { "Content-Type": "text/html; charset=utf-8", ...NO_STORE },
+        // Disposition "attachment" sengaja dipakai di mock: BFF harus tetap memaksanya "inline"
+        // agar PDF bisa tampil di dalam halaman soal, apa pun yang dikirim DOMjudge.
+        return new Response(statementPdf(problem), {
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename="${problem.id}.pdf"`,
+            ...NO_STORE,
+          },
         });
       }
       return json(problem);

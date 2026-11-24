@@ -115,7 +115,8 @@ di dalam file kode, misalnya sebagai komentar.
 
 **Perbedaan dengan DOMjudge sungguhan**
 
-- Statement soal berupa **HTML**, bukan PDF.
+- Statement soal berupa PDF contoh (2 halaman) yang dibuat di `src/lib/mock/data.ts`. Mock sengaja mengirim
+  `Content-Disposition: attachment`; BFF tetap memaksanya `inline` agar PDF tampil di halaman soal.
 - Halaman clarifications belum ada di frontend, jadi endpoint-nya hanya mengembalikan daftar kosong.
 - Hanya dua tim yang bisa login (Alpha dan Newbie); tim lain hanya muncul di leaderboard.
 - Scoreboard tidak pernah dibekukan (freeze).
@@ -252,8 +253,8 @@ autentikasi dan pembatasan akses berada.
 
 ## Status
 
-Sudah ada: login/logout, Home (3 keadaan), leaderboard, problemset (info soal + statement + kirim solusi dengan
-drag-and-drop), submission terbaru dengan verdict di Home, mode mock dengan skenario. Tampilan sudah mengikuti
+Sudah ada: login/logout, Home (3 keadaan), leaderboard, problemset (info soal + statement PDF yang tampil langsung
+di halaman, dengan tombol layar penuh + kirim solusi dengan drag-and-drop), submission terbaru dengan verdict di Home, mode mock dengan skenario. Tampilan sudah mengikuti
 Deep Sea Arena (`DESIGN_REF/`).
 
 Sudah diuji manual end-to-end terhadap DOMjudge 9.0.0 + judgehost lokal (WSL2) sebelum redesain: login tim, submit,
