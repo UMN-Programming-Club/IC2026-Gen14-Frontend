@@ -13,7 +13,7 @@ import type { Contest, Scoreboard, Team } from "./types";
 export interface PublicLeaderboard {
   /** false = contest belum bisa dilihat publik (belum di-activate, atau belum dimulai). */
   available: boolean;
-  /** Epoch ms saat data ini diambil dari DOMjudge (sama untuk semua pengunjung selama masih di-cache). */
+  /** Epoch ms saat scoreboard ini benar-benar diambil dari DOMjudge (bukan saat permintaan datang). */
   updatedAt: number;
   contest?: {
     name: string;
@@ -34,13 +34,33 @@ export interface PublicLeaderboard {
 // ---------- Cache bersama (per proses) ----------
 //
 // Berapa pun pengunjungnya, DOMjudge hanya dipanggil sekali per TTL: permintaan yang datang saat data
-// sedang diambil ikut menunggu hasil yang sama (single-flight). Jika DOMjudge gagal, data lama tetap
-// dilayani sampai 12x TTL, dan percobaan berikutnya ditunda 1 detik agar DOMjudge tidak dibanjiri.
+// sedang diambil ikut menunggu hasil yang sama (single-flight). TTL scoreboard dan contest dibuat pendek
+// karena perubahan status (freeze, unfreeze, jadwal diubah juri) harus cepat terlihat di layar proyektor;
+// bebannya tetap kecil (paling banyak ~0,5 panggilan per detik per proses). Soal dan tim jarang berubah.
+//
+// Jika DOMjudge gagal, data lama tetap dilayani paling lama STALE_GRACE_MS dihitung dari saat data itu
+// DIAMBIL (bukan dari percobaan terakhir), dan percobaan berikutnya ditunda RETRY_AFTER_FAIL_MS agar
+// DOMjudge tidak dibanjiri. Lewat batas itu pemanggil mendapat galat, sehingga layar menampilkan
+// penanda koneksi terputus alih-alih data basi tanpa batas.
+
+const TTL_CONTEST_MS = 5_000;
+const TTL_BOARD_MS = 2_000;
+const TTL_LIST_MS = 60_000;
+const STALE_GRACE_MS = 60_000;
+const RETRY_AFTER_FAIL_MS = 1_000;
+
+interface Cached<T> {
+  value: T;
+  /** Epoch ms saat nilai ini diambil dari DOMjudge. */
+  at: number;
+}
 
 interface Entry {
   at: number;
   value?: unknown;
-  inflight?: Promise<unknown>;
+  /** Setelah gagal: sampai kapan tidak mencoba lagi (data lama tetap dilayani). */
+  retryAt?: number;
+  inflight?: Promise<Cached<unknown>>;
 }
 const store = new Map<string, Entry>();
 
@@ -48,27 +68,42 @@ async function cached<T>(
   key: string,
   ttlMs: number,
   load: () => Promise<T>,
-): Promise<T> {
+): Promise<Cached<T>> {
   const e = store.get(key);
   const now = Date.now();
-  if (e?.value !== undefined && now - e.at < ttlMs) return e.value as T;
-  if (e?.inflight) return e.inflight as Promise<T>;
+  if (e?.value !== undefined) {
+    if (now - e.at < ttlMs) return { value: e.value as T, at: e.at };
+    // Baru saja gagal: layani data lama dulu, jangan langsung mencoba lagi.
+    if (e.retryAt && now < e.retryAt && now - e.at < STALE_GRACE_MS)
+      return { value: e.value as T, at: e.at };
+  }
+  if (e?.inflight) return e.inflight as Promise<Cached<T>>;
 
   const p = load().then(
-    (value) => {
-      store.set(key, { at: Date.now(), value });
-      return value;
+    (value): Cached<T> => {
+      const at = Date.now();
+      store.set(key, { at, value });
+      return { value, at };
     },
-    (err) => {
-      if (e?.value !== undefined && now - e.at < ttlMs * 12) {
-        store.set(key, { at: Date.now() - ttlMs + 1_000, value: e.value });
-        return e.value as T;
+    (err): Cached<T> => {
+      if (e?.value !== undefined && Date.now() - e.at < STALE_GRACE_MS) {
+        store.set(key, {
+          at: e.at,
+          value: e.value,
+          retryAt: Date.now() + RETRY_AFTER_FAIL_MS,
+        });
+        return { value: e.value as T, at: e.at };
       }
       store.delete(key);
       throw err;
     },
   );
-  store.set(key, { at: e?.at ?? 0, value: e?.value, inflight: p });
+  store.set(key, {
+    at: e?.at ?? 0,
+    value: e?.value,
+    retryAt: e?.retryAt,
+    inflight: p,
+  });
   return p;
 }
 
@@ -86,48 +121,52 @@ async function findContest(): Promise<Contest | null> {
   return list.find((c) => c.id === wanted || c.shortname === wanted) ?? null;
 }
 
-async function load(): Promise<PublicLeaderboard> {
-  const contest = await cached("contest", 15_000, findContest);
-  const updatedAt = Date.now();
-  if (!contest) return { available: false, updatedAt, problems: [], teams: [] };
+/**
+ * Data lengkap, memakai cache bersama per bagian. `updatedAt` adalah saat scoreboard terakhir benar-benar
+ * diambil dari DOMjudge, jadi layar dapat menampilkan usia data yang sebenarnya.
+ */
+export async function getPublicLeaderboard(): Promise<PublicLeaderboard> {
+  const contest = await cached("contest", TTL_CONTEST_MS, findContest);
+  if (!contest.value)
+    return { available: false, updatedAt: contest.at, problems: [], teams: [] };
 
-  const cid = encodeURIComponent(String(contest.id));
+  const cid = encodeURIComponent(String(contest.value.id));
   const [board, problems, teams] = await Promise.all([
-    cached("scoreboard", 5_000, () =>
+    cached("scoreboard", TTL_BOARD_MS, () =>
       getJson<Scoreboard>(`/contests/${cid}/scoreboard`),
     ),
-    cached("problems", 60_000, () =>
+    cached("problems", TTL_LIST_MS, () =>
       getJson<Record<string, unknown>[]>(`/contests/${cid}/problems`),
     ),
-    cached("teams", 60_000, () => getJson<Team[]>(`/contests/${cid}/teams`)),
+    cached("teams", TTL_LIST_MS, () =>
+      getJson<Team[]>(`/contests/${cid}/teams`),
+    ),
   ]);
-  if (!board) return { available: false, updatedAt, problems: [], teams: [] };
+  if (!board.value)
+    return { available: false, updatedAt: board.at, problems: [], teams: [] };
 
   // Hanya tim yang tampil di scoreboard publik, dan hanya id + nama.
-  const onBoard = new Set(board.rows.map((r) => r.team_id));
+  const onBoard = new Set(board.value.rows.map((r) => r.team_id));
   return {
     available: true,
-    updatedAt,
+    updatedAt: board.at,
     contest: {
-      name: contest.formal_name || contest.name || "",
-      start_time: contest.start_time,
-      end_time: contest.end_time,
+      name: contest.value.formal_name || contest.value.name || "",
+      start_time: contest.value.start_time,
+      end_time: contest.value.end_time,
     },
-    problems: (Array.isArray(problems) ? problems : []).map((p) => ({
-      id: p.id as string | undefined,
-      label: p.label as string | undefined,
-      ordinal: p.ordinal as number | undefined,
-      rgb: p.rgb as string | null | undefined,
-      color: p.color as string | null | undefined,
-    })),
-    teams: (Array.isArray(teams) ? teams : [])
+    problems: (Array.isArray(problems.value) ? problems.value : []).map(
+      (p) => ({
+        id: p.id as string | undefined,
+        label: p.label as string | undefined,
+        ordinal: p.ordinal as number | undefined,
+        rgb: p.rgb as string | null | undefined,
+        color: p.color as string | null | undefined,
+      }),
+    ),
+    teams: (Array.isArray(teams.value) ? teams.value : [])
       .filter((t) => t.id && onBoard.has(t.id))
       .map((t) => ({ id: t.id as string, name: t.display_name || t.name })),
-    scoreboard: board,
+    scoreboard: board.value,
   };
-}
-
-/** Data lengkap, memakai cache bersama. `updatedAt` mengikuti pengambilan scoreboard terakhir. */
-export async function getPublicLeaderboard(): Promise<PublicLeaderboard> {
-  return cached("page", 5_000, load);
 }

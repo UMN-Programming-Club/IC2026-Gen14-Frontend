@@ -6,7 +6,9 @@ import { getPublicLeaderboard } from "@/lib/domjudge/public-leaderboard";
  * pengunjung, dan hanya memanggil URL tetap ke DOMjudge, jadi tidak ada jalur untuk meminta data lain.
  *
  * Beban ke DOMjudge tetap kecil berapa pun pengunjungnya: server memakai satu cache bersama, dan
- * `s-maxage` memungkinkan CDN (mis. Vercel) menyajikannya tanpa menjalankan fungsi ini lagi.
+ * `s-maxage` memungkinkan CDN (mis. Vercel) menyajikannya tanpa menjalankan fungsi ini lagi. Sengaja
+ * pendek (2 detik) dan tanpa `stale-while-revalidate`: perubahan status (freeze, unfreeze, selesai)
+ * harus cepat sampai ke layar proyektor, dan CDN tidak boleh menyajikan data yang lebih basi dari itu.
  */
 export async function GET() {
   await connection(); // selalu dijalankan saat ada permintaan, bukan dibekukan saat build
@@ -14,9 +16,7 @@ export async function GET() {
     const data = await getPublicLeaderboard();
     return Response.json(data, {
       headers: {
-        "Cache-Control": data.available
-          ? "public, max-age=2, s-maxage=5, stale-while-revalidate=10"
-          : "public, max-age=2, s-maxage=5",
+        "Cache-Control": "public, max-age=0, s-maxage=2",
       },
     });
   } catch {

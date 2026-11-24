@@ -2,7 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const COOKIE_NAME = "umnpc_session";
 // Rute terbuka (tanpa login). Daftarkan hanya yang memang sengaja publik, dan cocokkan persis.
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/public/leaderboard"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/auth/login",
+  "/api/public/leaderboard",
+  "/live",
+];
 
 /**
  * Gerbang ringan: tanpa cookie session -> /login (halaman) atau 401 (API).
