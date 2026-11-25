@@ -17,15 +17,21 @@ export class ContestError extends Error {
   }
 }
 
+/**
+ * Pesan ContestError dibaca PESERTA (layar penuh dan jawaban API), jadi tanpa istilah teknis dan tanpa
+ * ID contest. Petunjuk untuk panitia ditulis ke log server.
+ */
+const MSG_UNREACHABLE =
+  "Server contest sedang tidak dapat dihubungi. Coba muat ulang beberapa saat lagi.";
+const MSG_NOT_FOUND =
+  "Belum ada contest yang aktif untuk tim kamu. Tunggu arahan panitia, lalu muat ulang halaman ini.";
+
 async function getJson<T>(creds: Credentials, path: string): Promise<T | null> {
   let res: Response;
   try {
     res = await djFetch(creds, path);
   } catch {
-    throw new ContestError(
-      "Server DOMjudge tidak dapat dihubungi.",
-      "unreachable",
-    );
+    throw new ContestError(MSG_UNREACHABLE, "unreachable");
   }
   if (!res.ok) return null;
   const body = (await res.json().catch(() => null)) as T | null;
@@ -89,18 +95,13 @@ export const resolveContest = cache(
         params: { query: { onlyActive: false } },
       });
       if (error || !data) {
-        throw new ContestError(
-          "DOMjudge menolak permintaan daftar contest.",
-          "unreachable",
-        );
+        console.warn("[contest] DOMjudge menolak permintaan daftar contest.");
+        throw new ContestError(MSG_UNREACHABLE, "unreachable");
       }
       contests = data as Contest[];
     } catch (e) {
       if (e instanceof ContestError) throw e;
-      throw new ContestError(
-        "Server DOMjudge tidak dapat dihubungi.",
-        "unreachable",
-      );
+      throw new ContestError(MSG_UNREACHABLE, "unreachable");
     }
 
     const found =
@@ -109,11 +110,11 @@ export const resolveContest = cache(
       (await synthesize(creds, wanted));
 
     if (!found) {
-      throw new ContestError(
-        `Contest "${wanted}" tidak ditemukan di DOMjudge. Pastikan contest sudah di-activate, dapat diakses tim ini, ` +
-          "dan DOMJUDGE_CONTEST_ID sama dengan External ID contest.",
-        "not-found",
+      console.warn(
+        `[contest] "${wanted}" tidak ditemukan. Pastikan contest sudah di-activate, publik, dapat diakses ` +
+          "tim ini, dan DOMJUDGE_CONTEST_ID sama dengan External ID contest.",
       );
+      throw new ContestError(MSG_NOT_FOUND, "not-found");
     }
     return found;
   },

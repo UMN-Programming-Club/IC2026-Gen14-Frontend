@@ -143,12 +143,15 @@ export function addSubmission(
 
 // ---------- Bentuk respons ----------
 
+/** Format RELTIME DOMjudge: "H:MM:SS.mmm", negatif sebelum contest mulai. */
 function contestTime(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000));
+  const abs = Math.abs(Math.trunc(ms));
+  const total = Math.floor(abs / 1000);
   const h = Math.floor(total / 3600);
   const m = String(Math.floor((total % 3600) / 60)).padStart(2, "0");
   const s = String(total % 60).padStart(2, "0");
-  return `${h}:${m}:${s}.000`;
+  const millis = String(abs % 1000).padStart(3, "0");
+  return `${ms < 0 ? "-" : ""}${h}:${m}:${s}.${millis}`;
 }
 
 export function toSubmission(s: MockSubmission, startMs: number): Submission {
@@ -357,10 +360,13 @@ export function buildScoreboard(now: number): Scoreboard {
     };
   });
 
+  // Start time yang belum ditetapkan: DOMjudge menghitung dari 0 (epoch).
+  const origin = env.MOCK_SCENARIO === "unscheduled" ? 0 : state.startMs;
+
   return {
     event_id: String(state.nextId),
     time: new Date(now).toISOString(),
-    contest_time: contestTime(now - state.startMs),
+    contest_time: contestTime(now - origin),
     state: buildContestState(now),
     rows,
   };

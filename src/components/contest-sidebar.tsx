@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Compass,
   FileText,
@@ -19,14 +19,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useLogout } from "@/lib/use-logout";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  /** Hanya terbuka selama contest berlangsung (terkunci sebelum mulai dan setelah selesai). */
-  lockedUntilStart?: boolean;
+  /** Hanya untuk saat contest: disembunyikan sebelum mulai, terkunci setelah selesai. */
+  contestOnly?: boolean;
 }
 
 /** Satu sumber data nav untuk desktop, tablet (rail), dan mobile (bottom bar). */
@@ -37,18 +38,9 @@ const NAV: NavItem[] = [
     href: "/problems",
     label: "Problemset",
     icon: FileText,
-    lockedUntilStart: true,
+    contestOnly: true,
   },
 ];
-
-function useLogout() {
-  const router = useRouter();
-  return async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.replace("/login");
-    router.refresh();
-  };
-}
 
 function Avatar({ name, className }: { name: string; className?: string }) {
   return (
@@ -67,12 +59,10 @@ function NavLink({
   item,
   active,
   locked,
-  lockedReason,
 }: {
   item: NavItem;
   active: boolean;
   locked: boolean;
-  lockedReason: string;
 }) {
   const Icon = item.icon;
   const base =
@@ -96,7 +86,7 @@ function NavLink({
     return (
       <div
         aria-disabled="true"
-        title={`${item.label} (${lockedReason})`}
+        title={`${item.label} (terkunci, contest sudah selesai)`}
         className={cn(base, "cursor-not-allowed text-white/25")}
       >
         {inner}
@@ -126,13 +116,15 @@ export function ContestSidebar() {
   const logout = useLogout();
   // Jam contest bersama: berganti tepat di batas waktu mulai, tidak menunggu poll berikutnya.
   const { phase } = useContestClock();
-  // Preview UI-only (development): /?preview=before mengunci Problemset seperti contest belum mulai.
+  // Preview UI-only (development): /?preview=before menampilkan sidebar seperti contest belum mulai.
   const preview = useSearchParams().get("preview");
   const previewBefore =
     process.env.NODE_ENV !== "production" && preview === "before";
-  // Problemset hanya terbuka selama contest berlangsung: terkunci sebelum mulai DAN setelah selesai.
-  const problemsetClosed =
-    previewBefore || phase === "before" || phase === "ended";
+  // Problemset baru muncul begitu contest mulai (juga disembunyikan selama fase belum diketahui, agar
+  // tidak berkedip), dan setelah selesai tetap tampil tetapi terkunci. Halaman dan API-nya terkunci
+  // sendiri, jadi membuka /problems lewat URL tetap tidak menampilkan soal.
+  const beforeStart = previewBefore || phase === null || phase === "before";
+  const items = NAV.filter((item) => !(item.contestOnly && beforeStart));
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -150,26 +142,24 @@ export function ContestSidebar() {
         <StarLogo className="size-[1.7rem] lg:size-[1.95rem]" />
         <div className="hidden leading-tight lg:block">
           <p className="text-[1.05rem] font-bold tracking-wide">UMNPC</p>
-          <p className="text-muted-foreground text-[0.65rem]">INTERNAL CONTEST</p>
+          <p className="text-muted-foreground text-[0.65rem]">
+            INTERNAL CONTEST
+          </p>
         </div>
       </div>
       <div className="film-strip mt-[1.1rem] ml-[0.2rem] hidden w-[11.4rem] rounded-l-full lg:block" />
 
       <nav
         aria-label="Navigasi utama"
-        className="grid grid-cols-4 md:mt-4 md:flex md:flex-col md:gap-2 lg:mt-[1.15rem] lg:gap-[0.3rem]"
+        // Mobile: satu baris, lebar dibagi rata berapa pun jumlah menunya.
+        className="grid auto-cols-fr grid-flow-col md:mt-4 md:flex md:flex-col md:gap-2 lg:mt-[1.15rem] lg:gap-[0.3rem]"
       >
-        {NAV.map((item) => (
+        {items.map((item) => (
           <NavLink
             key={item.href}
             item={item}
             active={isActive(item.href)}
-            locked={!!item.lockedUntilStart && problemsetClosed}
-            lockedReason={
-              phase === "ended"
-                ? "terkunci, contest sudah selesai"
-                : "terkunci sampai contest dimulai"
-            }
+            locked={!!item.contestOnly && phase === "ended"}
           />
         ))}
 

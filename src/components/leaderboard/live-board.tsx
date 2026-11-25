@@ -26,6 +26,7 @@ import {
   useFlipRows,
   useRankMoves,
 } from "@/components/leaderboard/live-parts";
+import { LiveStandby } from "@/components/leaderboard/live-standby";
 import { PROBLEM_FALLBACK_COLORS } from "@/lib/contest-status";
 import type { PublicLeaderboard } from "@/lib/domjudge/public-leaderboard";
 import { formatClock } from "@/lib/format";
@@ -65,7 +66,7 @@ function useNowMs(): number | null {
   );
 }
 
-type Phase = "before" | "running" | "ended" | "unknown";
+type Phase = "running" | "ended" | "unknown";
 
 /** Chip status "Selesai" yang sama dengan bilah atas peserta (`Topbar`). */
 function EndedChip() {
@@ -79,12 +80,10 @@ function EndedChip() {
 
 function Clock({
   phase,
-  startMs,
   endMs,
   now,
 }: {
   phase: Phase;
-  startMs: number;
   endMs: number;
   now: number | null;
 }) {
@@ -105,29 +104,21 @@ function Clock({
     );
   }
 
-  const label = phase === "before" ? "Mulai dalam" : "Sisa waktu";
-  const value = formatClock((phase === "before" ? startMs : endMs) - now);
   return (
     <div className="ml-auto text-right">
-      <p className="eyebrow">{label}</p>
-      <p
-        className={cn(
-          "mt-1 font-mono text-3xl font-bold tabular-nums sm:text-4xl",
-          phase === "running" ? "text-aqua-400" : "text-foam-50",
-        )}
-      >
-        {value}
+      <p className="eyebrow">Sisa waktu</p>
+      <p className="text-aqua-400 mt-1 font-mono text-3xl font-bold tabular-nums sm:text-4xl">
+        {formatClock(endMs - now)}
       </p>
     </div>
   );
 }
 
-function Notice({ title, text }: { title: string; text: string }) {
+function Notice({ title }: { title: string }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
       <Compass className="size-10 text-mist-400" aria-hidden="true" />
       <p className="mt-4 text-xl font-bold sm:text-2xl">{title}</p>
-      {text && <p className="mt-2 text-base text-mist-400">{text}</p>}
     </div>
   );
 }
@@ -197,20 +188,35 @@ export function LiveBoard() {
     return () => ro.disconnect();
   });
 
-  const startMs = data?.contest?.start_time
+  const stale = q.isError && !!data;
+
+  // Sudah mulai atau belum diputuskan server (`status`). Selama belum, tidak ada leaderboard.
+  if (data?.status !== "open") {
+    return (
+      <LiveStandby
+        data={data}
+        // `errorUpdatedAt`, bukan `isError`: tanpa data, react-query kembali ke "pending" setiap
+        // mencoba lagi, sehingga pesan galatnya akan berkedip dengan "Memuat...".
+        failed={q.errorUpdatedAt > 0}
+        stale={stale}
+        now={now}
+      />
+    );
+  }
+
+  const startMs = data.contest?.start_time
     ? Date.parse(data.contest.start_time)
     : NaN;
-  const endMs = data?.contest?.end_time
+  const endMs = data.contest?.end_time
     ? Date.parse(data.contest.end_time)
     : NaN;
+  // Jam browser hanya menentukan "selesai".
   const phase: Phase =
-    now === null || !Number.isFinite(startMs) || !Number.isFinite(endMs)
+    now === null || !Number.isFinite(endMs)
       ? "unknown"
-      : now < startMs
-        ? "before"
-        : now >= endMs
-          ? "ended"
-          : "running";
+      : now >= endMs
+        ? "ended"
+        : "running";
 
   const frozen = !!board?.state?.frozen && !board.state.thawed;
   const frozenAtMs = board?.state?.frozen
@@ -221,30 +227,10 @@ export function LiveBoard() {
       ? elapsedLabel(frozenAtMs - startMs)
       : null;
 
-  const cols = data?.problems ?? [];
+  const cols = data.problems;
   // Blok kiri (rank, tim, AC, penalti) selebar tetap dan selalu terlihat; kolom soal di kanannya.
   const grid = `${FIXED_WIDTH} repeat(${Math.max(cols.length, 1)}, minmax(5rem,1fr))`;
-  const showBoard =
-    !!data && data.available && phase !== "before" && !!rows && rows.length > 0;
-
-  let notice: { title: string; text: string } | null = null;
-  if (!data) {
-    notice = q.isError
-      ? {
-          title: "Leaderboard belum dapat dimuat",
-          text: "Mencoba lagi otomatis...",
-        }
-      : { title: "Memuat leaderboard...", text: "" };
-  } else if (!data.available || phase === "before") {
-    notice = {
-      title: "Leaderboard belum dibuka",
-      text: "Klasemen muncul begitu contest dimulai.",
-    };
-  } else if (!rows || rows.length === 0) {
-    notice = { title: "Belum ada tim di leaderboard", text: "" };
-  }
-
-  const stale = q.isError && !!data;
+  const showBoard = !!rows && rows.length > 0;
 
   // Hitung mundur ke pengambilan data berikutnya. Timer react-query dihitung ulang tiap pengambilan
   // selesai (berhasil atau gagal), jadi patokannya adalah yang paling akhir di antara keduanya.
@@ -265,25 +251,25 @@ export function LiveBoard() {
           <div className="min-w-0">
             <p className="eyebrow">UMNPC Internal Contest</p>
             <h1 className="title-display mt-1 text-3xl sm:text-4xl">
-              {data?.contest?.name || "Leaderboard"}
+              {data.contest?.name || "Leaderboard"}
             </h1>
           </div>
-          <Clock phase={phase} startMs={startMs} endMs={endMs} now={now} />
+          <Clock phase={phase} endMs={endMs} now={now} />
         </header>
 
-        {frozen && phase !== "before" && (
+        {frozen && (
           <FrozenBanner atLabel={frozenAtLabel} ended={phase === "ended"} />
         )}
 
         <section
           className={cn(
             "bg-panel relative flex min-h-40 flex-1 flex-col overflow-hidden rounded-2xl border",
-            frozen && phase !== "before"
+            frozen
               ? "border-ice-400/40 shadow-[0_0_0_1px_rgba(127,208,242,0.08),0_0_32px_-12px_rgba(127,208,242,0.35)]"
               : "border-line",
           )}
         >
-          {notice && <Notice title={notice.title} text={notice.text} />}
+          {!showBoard && <Notice title="Belum ada tim di leaderboard" />}
           {showBoard && rows && (
             <>
               <div
@@ -422,7 +408,8 @@ export function LiveBoard() {
         </section>
 
         <footer className="flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 text-sm text-mist-400">
-          <Legend />
+          {/* Legenda hanya berarti bila ada tabel; tanpa itu keterangan data tetap di kanan. */}
+          {showBoard ? <Legend /> : <span />}
           <div className="flex items-center gap-4">
             {stale && (
               <span
@@ -433,14 +420,12 @@ export function LiveBoard() {
                 Koneksi terputus, menampilkan data terakhir
               </span>
             )}
-            {data && (
-              <span>
-                Diperbarui{" "}
-                {new Date(data.updatedAt).toLocaleTimeString("id-ID", {
-                  hour12: false,
-                })}
-              </span>
-            )}
+            <span>
+              Diperbarui{" "}
+              {new Date(data.updatedAt).toLocaleTimeString("id-ID", {
+                hour12: false,
+              })}
+            </span>
             {refreshIn !== null && (
               <span className="tabular-nums" aria-live="off">
                 {q.isFetching || refreshIn === 0

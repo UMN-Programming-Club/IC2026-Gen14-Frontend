@@ -4,6 +4,7 @@ import { ContestClockProvider } from "@/components/arena/contest-clock";
 import { ContestProvider } from "@/components/contest-context";
 import { ContestMain } from "@/components/contest-main";
 import { ContestSidebar } from "@/components/contest-sidebar";
+import { ContestUnavailable } from "@/components/contest-unavailable";
 import { MockBanner } from "@/components/mock-banner";
 import { ContestError, resolveContest } from "@/lib/domjudge/contest";
 import { getSessionUser } from "@/lib/session";
@@ -17,19 +18,13 @@ async function ContestShell({ children }: { children: ReactNode }) {
   try {
     contest = await resolveContest(user.username, user.password);
   } catch (e) {
-    const message =
-      e instanceof ContestError
-        ? e.message
-        : "Terjadi kesalahan saat memuat contest.";
+    const known = e instanceof ContestError ? e : null;
     return (
-      <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-3 px-4 py-16">
-        <h1 className="font-display text-4xl leading-none font-extrabold uppercase italic">
-          Contest tidak <span className="text-danger">dapat dimuat</span>
-        </h1>
-        <p role="alert" className="text-muted-foreground">
-          {message}
-        </p>
-      </main>
+      <ContestUnavailable
+        kind={known?.kind ?? "unknown"}
+        message={known?.message ?? "Terjadi kesalahan saat memuat contest."}
+        teamName={user.teamName ?? user.username}
+      />
     );
   }
 

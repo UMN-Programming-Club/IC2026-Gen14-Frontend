@@ -11,10 +11,17 @@ import type { Contest, Scoreboard, Team } from "./types";
  * Hanya field yang dibutuhkan yang diteruskan (daftar soal tanpa judul, batas waktu, atau statement).
  */
 export interface PublicLeaderboard {
-  /** false = contest belum bisa dilihat publik (belum di-activate, atau belum dimulai). */
-  available: boolean;
-  /** Epoch ms saat scoreboard ini benar-benar diambil dari DOMjudge (bukan saat permintaan datang). */
+  /**
+   * "inactive": tidak ada contest yang bisa dilihat publik (belum di-activate, tidak publik, atau sudah
+   * dinonaktifkan). "upcoming": contest aktif tetapi belum mulai. "open": klasemen tersedia (berlangsung
+   * atau sudah selesai).
+   */
+  status: "inactive" | "upcoming" | "open";
+  /** Epoch ms saat data ini benar-benar diambil dari DOMjudge (bukan saat permintaan datang). */
   updatedAt: number;
+  /** Hanya untuk "upcoming": waktu mulai (ISO), atau null bila belum ditetapkan panitia. */
+  startsAt?: string | null;
+  /** Hanya untuk "open", beserta `scoreboard`. */
   contest?: {
     name: string;
     start_time?: string | null;
@@ -35,15 +42,16 @@ export interface PublicLeaderboard {
 //
 // Berapa pun pengunjungnya, DOMjudge hanya dipanggil sekali per TTL: permintaan yang datang saat data
 // sedang diambil ikut menunggu hasil yang sama (single-flight). TTL scoreboard dan contest dibuat pendek
-// karena perubahan status (freeze, unfreeze, jadwal diubah juri) harus cepat terlihat di layar proyektor;
-// bebannya tetap kecil (paling banyak ~0,5 panggilan per detik per proses). Soal dan tim jarang berubah.
+// karena perubahan status (mulai, freeze, unfreeze, jadwal diubah juri) harus cepat terlihat di layar
+// proyektor; bebannya tetap kecil (paling banyak ~1 panggilan per detik per proses). Soal dan tim jarang
+// berubah.
 //
 // Jika DOMjudge gagal, data lama tetap dilayani paling lama STALE_GRACE_MS dihitung dari saat data itu
 // DIAMBIL (bukan dari percobaan terakhir), dan percobaan berikutnya ditunda RETRY_AFTER_FAIL_MS agar
 // DOMjudge tidak dibanjiri. Lewat batas itu pemanggil mendapat galat, sehingga layar menampilkan
 // penanda koneksi terputus alih-alih data basi tanpa batas.
 
-const TTL_CONTEST_MS = 5_000;
+const TTL_CONTEST_MS = 2_000;
 const TTL_BOARD_MS = 2_000;
 const TTL_LIST_MS = 60_000;
 const STALE_GRACE_MS = 60_000;
@@ -107,18 +115,58 @@ async function cached<T>(
   return p;
 }
 
-async function getJson<T>(path: string): Promise<T | null> {
+/** Gagal (termasuk ditolak gerbang) selalu melempar, supaya tidak disangka "belum ada contest". */
+async function getJson<T>(path: string): Promise<T> {
   const res = await djPublicFetch(path);
-  if (!res.ok) return null;
-  return (await res.json().catch(() => null)) as T | null;
+  if (!res.ok) throw new Error(`DOMjudge menjawab ${res.status} untuk ${path}`);
+  return (await res.json()) as T;
 }
 
 /** Contest yang dikonfigurasi (id ATAU shortname) di antara contest yang terlihat publik. */
 async function findContest(): Promise<Contest | null> {
   const list = await getJson<Contest[]>("/contests");
-  if (!Array.isArray(list)) return null;
+  if (!Array.isArray(list))
+    throw new Error("Daftar contest dari DOMjudge tidak dikenali.");
   const wanted = env.DOMJUDGE_CONTEST_ID;
   return list.find((c) => c.id === wanted || c.shortname === wanted) ?? null;
+}
+
+/** "-8:00:12.500" -> -28812500. `null` bila formatnya tidak dikenali. */
+function relTimeMs(value: string | null | undefined): number | null {
+  const m = /^(-)?(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$/.exec(value ?? "");
+  if (!m) return null;
+  const ms = (Number(m[2]) * 3600 + Number(m[3]) * 60 + Number(m[4])) * 1000;
+  return m[1] ? -ms : ms;
+}
+
+/**
+ * Contest yang BELUM mulai tidak ada di `/contests` (juga tidak di `/contests/{id}`), tetapi
+ * `/contests/{id}/scoreboard` sudah bisa dibaca anonim bila contest aktif dan publik. Barisnya kosong,
+ * namun ada `time` (waktu kejadian terakhir di DOMjudge) dan `contest_time` (= `time` - waktu mulai),
+ * sehingga waktu mulai = `time` - `contest_time`. Tidak perlu akun "API reader".
+ *
+ * `null` = tidak ada contest aktif dengan ID itu (404/403). Di sini DOMJUDGE_CONTEST_ID harus External
+ * ID, karena shortname tidak bisa dicocokkan sebelum contest muncul di daftar.
+ */
+async function findUpcoming(): Promise<{ startsAt: string | null } | null> {
+  const cid = encodeURIComponent(env.DOMJUDGE_CONTEST_ID);
+  const path = `/contests/${cid}/scoreboard`;
+  const res = await djPublicFetch(path);
+  if (res.status === 404 || res.status === 403) return null;
+  if (!res.ok) throw new Error(`DOMjudge menjawab ${res.status} untuk ${path}`);
+  const board = (await res.json()) as Scoreboard;
+
+  const at = Date.parse(board.time ?? "");
+  const since = relTimeMs(board.contest_time);
+  // Dibulatkan ke detik: DOMjudge membulatkan kedua angka itu ke milidetik secara terpisah.
+  const start =
+    Number.isFinite(at) && since !== null
+      ? Math.round((at - since) / 1000) * 1000
+      : NaN;
+  // Start time yang dimatikan juri ("delay") dihitung DOMjudge dari 0, hasilnya tahun 1970.
+  return {
+    startsAt: start > Date.UTC(2000, 0) ? new Date(start).toISOString() : null,
+  };
 }
 
 /**
@@ -127,8 +175,14 @@ async function findContest(): Promise<Contest | null> {
  */
 export async function getPublicLeaderboard(): Promise<PublicLeaderboard> {
   const contest = await cached("contest", TTL_CONTEST_MS, findContest);
-  if (!contest.value)
-    return { available: false, updatedAt: contest.at, problems: [], teams: [] };
+  // Tidak ada di daftar, atau tanpa start_time (start dimatikan juri setelah waktunya lewat).
+  if (!contest.value?.start_time) {
+    const next = await cached("upcoming", TTL_CONTEST_MS, findUpcoming);
+    const empty = { updatedAt: next.at, problems: [], teams: [] };
+    return next.value
+      ? { ...empty, status: "upcoming", startsAt: next.value.startsAt }
+      : { ...empty, status: "inactive" };
+  }
 
   const cid = encodeURIComponent(String(contest.value.id));
   const [board, problems, teams] = await Promise.all([
@@ -142,13 +196,10 @@ export async function getPublicLeaderboard(): Promise<PublicLeaderboard> {
       getJson<Team[]>(`/contests/${cid}/teams`),
     ),
   ]);
-  if (!board.value)
-    return { available: false, updatedAt: board.at, problems: [], teams: [] };
-
   // Hanya tim yang tampil di scoreboard publik, dan hanya id + nama.
   const onBoard = new Set(board.value.rows.map((r) => r.team_id));
   return {
-    available: true,
+    status: "open",
     updatedAt: board.at,
     contest: {
       name: contest.value.formal_name || contest.value.name || "",
