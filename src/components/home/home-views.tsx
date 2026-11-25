@@ -120,7 +120,7 @@ function CountdownCard({
 }
 
 /** Contest sudah di-activate tapi start time belum diisi: belum ada yang bisa dihitung mundur. */
-function WaitingCard() {
+function WaitingCard({ text }: { text: string }) {
   return (
     <div
       role="status"
@@ -131,8 +131,7 @@ function WaitingCard() {
         Menunggu jadwal mulai
       </p>
       <p className="text-muted-foreground mt-1 max-w-[30rem] text-[0.8rem] lg:text-[0.88rem]">
-        Kamu sudah masuk. Hitung mundur akan muncul di sini begitu panitia
-        menetapkan waktu mulai, dan halaman ini diperbarui otomatis.
+        {text}
       </p>
     </div>
   );
@@ -162,6 +161,73 @@ function InfoCard({
   );
 }
 
+/** Kerangka layar tunggu: pil "Gen XIV", judul besar, keterangan, lalu isi tambahan. */
+export function ArenaScreen({
+  white,
+  accent,
+  subtitle,
+  children,
+}: {
+  white: string;
+  accent: string;
+  subtitle: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 pb-4 text-center lg:px-[2.1rem] lg:pb-[4.8rem]">
+      <span className="border-teal/35 bg-teal/[0.06] font-display rounded-full border px-[1.15rem] py-[0.28rem] text-[0.8rem] font-semibold tracking-[0.1em] text-[#7fd6c9] uppercase italic lg:text-[0.95rem]">
+        Gen XIV
+      </span>
+      <h1 className="font-display mt-3 text-[clamp(2.6rem,13vw,3.8rem)] leading-[0.9] font-extrabold uppercase italic lg:mt-[1rem] lg:text-[4.9rem] lg:whitespace-nowrap">
+        {white} <span className="text-teal">{accent}</span>
+      </h1>
+      <p className="text-muted-foreground mt-2 text-[0.9rem] lg:mt-[0.55rem] lg:text-[1.02rem]">
+        {subtitle}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+/** Judul "Get Ready" + hitung mundur; dipakai Home peserta dan leaderboard proyektor (`/live`). */
+export function GetReady({
+  now,
+  targetMs,
+  subtitle,
+  waitingText,
+  children,
+}: {
+  now: number | null;
+  targetMs: number | null;
+  /** Pengganti "Arena dibuka dalam" / "Waktu mulai belum ditentukan panitia". */
+  subtitle?: string;
+  /** Keterangan di kartu tunggu saat waktu mulai belum diisi. */
+  waitingText: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <ArenaScreen
+      white="Get"
+      accent="Ready"
+      subtitle={
+        subtitle ??
+        (targetMs === null
+          ? "Waktu mulai belum ditentukan panitia"
+          : "Arena dibuka dalam")
+      }
+    >
+      <div className="mt-4 flex w-full justify-center lg:mt-[1.8rem]">
+        {targetMs === null ? (
+          <WaitingCard text={waitingText} />
+        ) : (
+          <CountdownCard now={now} targetMs={targetMs} />
+        )}
+      </div>
+      {children}
+    </ArenaScreen>
+  );
+}
+
 export function BeforeView({
   now,
   targetMs,
@@ -176,25 +242,11 @@ export function BeforeView({
   problemCount: number | null;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 pb-4 text-center lg:px-[2.1rem] lg:pb-[4.8rem]">
-      <span className="border-teal/35 bg-teal/[0.06] font-display rounded-full border px-[1.15rem] py-[0.28rem] text-[0.8rem] font-semibold tracking-[0.1em] text-[#7fd6c9] uppercase italic lg:text-[0.95rem]">
-        Gen XIV
-      </span>
-      <h1 className="font-display mt-3 text-[clamp(2.6rem,13vw,3.8rem)] leading-[0.9] font-extrabold uppercase italic lg:mt-[1rem] lg:text-[4.9rem] lg:whitespace-nowrap">
-        Get <span className="text-teal">Ready</span>
-      </h1>
-      <p className="text-muted-foreground mt-2 text-[0.9rem] lg:mt-[0.55rem] lg:text-[1.02rem]">
-        {targetMs === null
-          ? "Waktu mulai belum ditentukan panitia"
-          : "Arena dibuka dalam"}
-      </p>
-      <div className="mt-4 flex w-full justify-center lg:mt-[1.8rem]">
-        {targetMs === null ? (
-          <WaitingCard />
-        ) : (
-          <CountdownCard now={now} targetMs={targetMs} />
-        )}
-      </div>
+    <GetReady
+      now={now}
+      targetMs={targetMs}
+      waitingText="Kamu sudah masuk. Hitung mundur akan muncul di sini begitu panitia menetapkan waktu mulai, dan halaman ini diperbarui otomatis."
+    >
       <div className="mt-3 grid w-full max-w-[45.1rem] grid-cols-1 gap-2 text-left sm:grid-cols-3 lg:mt-[1.3rem] lg:gap-[1.05rem]">
         <InfoCard label="Tim" value={teamName.replace(/^tim\s+/i, "")} />
         <InfoCard label="Durasi" value={durationLabel} mono />
@@ -204,7 +256,7 @@ export function BeforeView({
           mono
         />
       </div>
-    </div>
+    </GetReady>
   );
 }
 

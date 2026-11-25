@@ -177,8 +177,11 @@ export async function mockFetch(request: Request): Promise<Response> {
   switch (resource) {
     case "state":
       return json(buildContestState(now));
-    case "scoreboard":
-      return json(buildScoreboard(now));
+    case "scoreboard": {
+      // Sebelum mulai DOMjudge tetap menjawab (time, contest_time, state), tetapi tanpa baris.
+      const board = buildScoreboard(now);
+      return json(hidden ? { ...board, rows: [] } : board);
+    }
     case "languages":
       return json(LANGUAGES);
     case "judgement-types":
